@@ -43,6 +43,7 @@ from frontend.app import (
     SimMapButtonReady,
 )
 from frontend.layout import Layout
+from frontend.components.login import Login
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -104,7 +105,7 @@ thread_pool = ThreadPoolExecutor()
 # Gemini config
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images. 
+GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images.
 If the user query can not be interpreted as a question, or if the answer to the query can not be inferred from the images,
 answer with the exact phrase "I am sorry, I can't find enough relevant information on these pages to answer your question.".
 Your response should be HTML formatted, but only simple tags, such as <b>. <p>, <i>, <br> <ul> and <li> are allowed. No HTML tables.
@@ -412,6 +413,11 @@ async def get_message(query_id: str, query: str, doc_ids: str):
 @rt("/app")
 def get():
     return Layout(Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")))
+
+
+@rt("/login")
+def get():
+    return Layout(Main(Login()))
 
 
 if __name__ == "__main__":
