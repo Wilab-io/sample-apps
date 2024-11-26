@@ -538,3 +538,7 @@ xxhash==3.5.0
     # via datasets
 yarl==1.13.1
     # via aiohttp
+flask
+psycopg2-binary
+flask-login
+python-dotenv
