@@ -21,5 +21,8 @@ RUN pip install --no-cache-dir -r requirements.txt || \
 # Copy the rest of the application
 COPY . .
 
-# Command to run the application
-CMD ["python", "src/main.py"]
+# Make the start script executable
+RUN chmod +x start.sh
+
+# Use the start script as the entry point
+CMD ["./start.sh"]
