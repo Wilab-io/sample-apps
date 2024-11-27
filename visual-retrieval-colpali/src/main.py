@@ -441,7 +441,9 @@ def get():
 
 
 @rt("/login")
-def get():
+async def get(request):
+    if "user_id" in request.session:
+        return Redirect("/")
     return Layout(Main(Login()))
 
 
