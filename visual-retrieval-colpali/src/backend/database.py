@@ -1,9 +1,13 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy.schema import CreateTable
+from sqlalchemy import select
+from uuid import UUID
 import os
-from typing import Optional
+from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
+from .models import User
+from .base import Base
 
 # Connection URL
 DATABASE_URL = (
@@ -19,16 +23,12 @@ DATABASE_URL = (
 engine = create_async_engine(DATABASE_URL, echo=False)
 async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-# Base class for SQLAlchemy models
-class Base(DeclarativeBase):
-    pass
-
 class Database:
     def __init__(self):
         self.session_maker = async_session
 
     @asynccontextmanager
-    async def get_session(self) -> AsyncSession:
+    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
         async with self.session_maker() as session:
             try:
                 yield session
@@ -36,6 +36,14 @@ class Database:
             except Exception:
                 await session.rollback()
                 raise
+
+    async def get_user_by_id(self, user_id: UUID) -> Optional[User]:
+        """Get user by ID"""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(User).where(User.user_id == user_id)
+            )
+            return result.scalar_one_or_none()
 
     async def fetch_one(self, query, *args):
         async with self.get_session() as session:

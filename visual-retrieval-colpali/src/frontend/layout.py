@@ -1,7 +1,10 @@
-from fasthtml.components import Body, Div, Header, Img, Nav, Title
+from fasthtml.components import Body, Div, Header, Img, Nav, Title, P, Span
 from fasthtml.xtend import A, Script
 from lucide_fasthtml import Lucide
 from shad4fast import Button, Separator
+from sqlalchemy import select
+from uuid import UUID
+from backend.models import User
 
 layout_script = Script(
     """
@@ -128,11 +131,33 @@ def ThemeToggle(variant="ghost", cls=None, **kwargs):
     )
 
 
-def Links():
+async def Links(request=None):
+    username = None
+    if request and "user_id" in request.session:
+        try:
+            user_id = UUID(request.session["user_id"])
+            user = await request.app.db.get_user_by_id(user_id)
+            username = user.username if user else None
+        except Exception as e:
+            request.app.logger.error(f"Error getting username: {e}")
+
     return Nav(
+        Div(
+            Img(
+                src="/static/img/user.svg",
+                alt="User icon",
+                cls="h-4 w-4 inline-block mr-2 dark:brightness-0 dark:invert"
+            ),
+            Span(
+                username,
+                cls="text-sm text-black dark:text-white font-medium"
+            ),
+            cls="flex items-center mr-4"
+        ) if username else None,
         A(
-            Button("About this demo?", variant="link"),
+            P("About this demo?", cls="text-sm text-black dark:text-white font-medium mr-4"),
             href="/about-this-demo",
+            cls="hover:opacity-80"
         ),
         Separator(orientation="vertical"),
         A(
@@ -151,13 +176,13 @@ def Links():
     )
 
 
-def Layout(*c, is_home=False, **kwargs):
+async def Layout(*c, is_home=False, request=None, **kwargs):
     return (
         Title("Visual Retrieval ColPali"),
         Body(
             Header(
                 A(Logo(), href="/"),
-                Links(),
+                await Links(request=request),  # Await the async Links function
                 cls="min-h-[55px] h-[55px] w-full flex items-center justify-between px-4",
             ),
             *c,

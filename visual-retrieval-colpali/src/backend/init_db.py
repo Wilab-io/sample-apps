@@ -32,7 +32,6 @@ async def init_admin_user(logger: logging.Logger):
                 logger.info("Admin user created successfully")
             else:
                 logger.info("Admin user already exists")
-                logger.debug(f"Existing user hash: {user.password_hash}")
 
         except Exception as e:
             logger.error(f"Error in init_admin_user: {e}")

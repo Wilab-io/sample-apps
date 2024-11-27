@@ -2,7 +2,6 @@ import asyncio
 import base64
 import os
 import time
-import uuid
 import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -162,16 +161,14 @@ def serve_static(filepath: str):
 
 @rt("/")
 @login_required
-async def get(session):
-    if "session_id" not in session:
-        session["session_id"] = str(uuid.uuid4())
-    return Layout(Main(Home()), is_home=True)
+async def get(request):
+    return await Layout(Main(Home()), is_home=True, request=request)
 
 
 @rt("/about-this-demo")
 @login_required
-async def get():
-    return Layout(Main(AboutThisDemo()))
+async def get(request):
+    return await Layout(Main(AboutThisDemo()), request=request)
 
 
 @rt("/search")
@@ -181,8 +178,7 @@ async def get(request, query: str = "", ranking: str = "hybrid"):
 
     # Always render the SearchBox first
     if not query:
-        # Show SearchBox and a message for missing query
-        return Layout(
+        return await Layout(
             Main(
                 Div(
                     SearchBox(query_value=query, ranking_value=ranking),
@@ -195,17 +191,19 @@ async def get(request, query: str = "", ranking: str = "hybrid"):
                     ),
                     cls="grid",
                 )
-            )
+            ),
+            request=request
         )
     # Generate a unique query_id based on the query and ranking value
     query_id = generate_query_id(query, ranking)
     # Show the loading message if a query is provided
-    return Layout(
+    return await Layout(
         Main(Search(request), data_overlayscrollbars_initialize=True, cls="border-t"),
         Aside(
             ChatResult(query_id=query_id, query=query),
             cls="border-t border-l hidden md:block",
         ),
+        request=request
     )  # Show SearchBox and Loading message initially
 
 
@@ -436,15 +434,18 @@ async def get_message(query_id: str, query: str, doc_ids: str):
 
 @rt("/app")
 @login_required
-def get():
-    return Layout(Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")))
+async def get(request):
+    return await Layout(
+        Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")),
+        request=request
+    )
 
 
 @rt("/login")
 async def get(request):
     if "user_id" in request.session:
         return Redirect("/")
-    return Layout(Main(Login()))
+    return await Layout(Main(Login()))
 
 
 @rt("/api/login", methods=["POST"])
