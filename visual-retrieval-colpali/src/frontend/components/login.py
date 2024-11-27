@@ -1,6 +1,6 @@
 from fasthtml.components import Div, H1, P, Form, Input, Button
 
-def Login():
+def Login(error_message=None):
     return Div(
         Div(
             H1(
@@ -24,14 +24,25 @@ def Login():
                     name="password",
                     cls="w-full p-4 mb-6 border rounded-[20px] focus:outline-none focus:border-black dark:bg-gray-800 dark:border-gray-700"
                 ),
+                P(
+                    error_message,
+                    cls="text-destructive text-sm mb-4 text-center font-medium"
+                ) if error_message else None,
                 Button(
                     "Login",
                     type="submit",
                     cls="w-full p-4 bg-black text-white rounded-[20px] hover:bg-gray-800 transition-colors"
                 ),
-                cls="bg-white dark:bg-gray-900 p-8 rounded-[20px] shadow-lg w-full max-w-md"
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[20px] shadow-lg w-full max-w-md",
+                hx_post="/api/login",
+                hx_target="#login-form",
+                hx_swap="outerHTML",
+                hx_trigger="submit",
+                hx_indicator="#login-form",
+                hx_redirect="/"
             ),
             cls="flex flex-col items-center justify-center min-h-screen w-full max-w-screen-xl mx-auto px-4"
         ),
-        cls="w-full h-full bg-gray-50 dark:bg-gray-950"
+        cls="w-full h-full bg-gray-50 dark:bg-gray-950",
+        id="login-form"
     )

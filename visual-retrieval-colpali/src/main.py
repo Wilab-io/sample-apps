@@ -20,7 +20,7 @@ from fasthtml.common import (
     Link,
     Main,
     P,
-    RedirectResponse,
+    Redirect,
     Script,
     StreamingResponse,
     fast_app,
@@ -29,6 +29,10 @@ from fasthtml.common import (
 from PIL import Image
 from shad4fast import ShadHead
 from vespa.application import Vespa
+from sqlalchemy import select
+from backend.auth import verify_password
+from backend.database import Database
+from backend.models import User
 
 from backend.colpali import SimMapGenerator
 from backend.vespa_app import VespaQueryClient
@@ -44,6 +48,8 @@ from frontend.app import (
 )
 from frontend.layout import Layout
 from frontend.components.login import Login
+from backend.middleware import login_required
+from backend.init_db import init_admin_user
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -121,6 +127,11 @@ SIM_MAP_DIR = STATIC_DIR / "sim_maps"
 os.makedirs(IMG_DIR, exist_ok=True)
 os.makedirs(SIM_MAP_DIR, exist_ok=True)
 
+app.db = Database()
+
+@app.on_event("shutdown")
+def shutdown_db():
+    app.db.close()
 
 @app.on_event("startup")
 def load_model_on_startup():
@@ -134,6 +145,11 @@ async def keepalive():
     return
 
 
+@app.on_event("startup")
+async def startup_event():
+    await init_admin_user(logger)
+
+
 def generate_query_id(query, ranking_value):
     hash_input = (query + ranking_value).encode("utf-8")
     return hash(hash_input)
@@ -145,19 +161,22 @@ def serve_static(filepath: str):
 
 
 @rt("/")
-def get(session):
+@login_required
+async def get(session):
     if "session_id" not in session:
         session["session_id"] = str(uuid.uuid4())
     return Layout(Main(Home()), is_home=True)
 
 
 @rt("/about-this-demo")
-def get():
+@login_required
+async def get():
     return Layout(Main(AboutThisDemo()))
 
 
 @rt("/search")
-def get(request, query: str = "", ranking: str = "hybrid"):
+@login_required
+async def get(request, query: str = "", ranking: str = "hybrid"):
     logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}")
 
     # Always render the SearchBox first
@@ -191,9 +210,10 @@ def get(request, query: str = "", ranking: str = "hybrid"):
 
 
 @rt("/fetch_results")
+@login_required
 async def get(session, request, query: str, ranking: str):
     if "hx-request" not in request.headers:
-        return RedirectResponse("/search")
+        return Redirect("/search")
 
     # Get the hash of the query and ranking value
     query_id = generate_query_id(query, ranking)
@@ -293,6 +313,7 @@ def get_and_store_sim_maps(
 
 
 @app.get("/get_sim_map")
+@login_required
 async def get_sim_map(query_id: str, idx: int, token: str, token_idx: int):
     """
     Endpoint that each of the sim map button polls to get the sim map image
@@ -318,6 +339,7 @@ async def get_sim_map(query_id: str, idx: int, token: str, token_idx: int):
 
 
 @app.get("/full_image")
+@login_required
 async def full_image(doc_id: str):
     """
     Endpoint to get the full quality image for a given result id.
@@ -340,6 +362,7 @@ async def full_image(doc_id: str):
 
 
 @rt("/suggestions")
+@login_required
 async def get_suggestions(query: str = ""):
     """Endpoint to get suggestions as user types in the search box"""
     query = query.lower().strip()
@@ -403,6 +426,7 @@ async def message_generator(query_id: str, query: str, doc_ids: list):
 
 
 @app.get("/get-message")
+@login_required
 async def get_message(query_id: str, query: str, doc_ids: str):
     return StreamingResponse(
         message_generator(query_id=query_id, query=query, doc_ids=doc_ids.split(",")),
@@ -411,6 +435,7 @@ async def get_message(query_id: str, query: str, doc_ids: str):
 
 
 @rt("/app")
+@login_required
 def get():
     return Layout(Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")))
 
@@ -419,6 +444,31 @@ def get():
 def get():
     return Layout(Main(Login()))
 
+
+@rt("/api/login", methods=["POST"])
+async def login(request, username: str, password: str):
+    async with app.db.get_session() as session:
+        try:
+            result = await session.execute(
+                select(User).where(User.username == username)
+            )
+            user = result.scalar_one_or_none()
+
+            if not user:
+                logger.debug("User not found: %s", username)
+                return Login(error_message="The user does not exist")
+            if not verify_password(password, user.password_hash, logger):
+                logger.debug("Invalid credentials for user: %s", username)
+                return Login(error_message="Invalid password")
+
+            request.session["user_id"] = str(user.user_id)
+            logger.debug("Successful login for user: %s", username)
+
+            return Redirect("/")
+
+        except Exception as e:
+            logger.error("Login error: %s", str(e))
+            return Login(error_message="An error occurred during login. Please try again.")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
