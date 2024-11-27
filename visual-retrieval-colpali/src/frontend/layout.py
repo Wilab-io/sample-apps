@@ -9,7 +9,7 @@ layout_script = Script(
           const main = document.querySelector('main');
           const aside = document.querySelector('aside');
           const body = document.body;
-        
+
           if (main && aside && main.nextElementSibling === aside) {
             // If we have both main and aside, adjust the layout for larger screens
             body.classList.remove('grid-cols-1'); // Remove single-column layout
