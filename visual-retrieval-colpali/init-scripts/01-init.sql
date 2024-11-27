@@ -1,21 +1,23 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 CREATE TYPE ranker_type AS ENUM ('colpali', 'bm25', 'hybrid-colpali-bm25');
 
-CREATE TABLE "user" (
-    user_id VARCHAR(255) PRIMARY KEY,
+CREATE TABLE app_user (
+    user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE user_document (
     document_id VARCHAR(255) PRIMARY KEY,
-    user_id VARCHAR(255) NOT NULL,
+    user_id UUID NOT NULL,
     document_name VARCHAR(255) NOT NULL,
     upload_ts TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES "user"(user_id)
+    FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );
 
 CREATE TABLE user_settings (
-    user_id VARCHAR(255) PRIMARY KEY,
+    user_id UUID PRIMARY KEY,
     demo_questions TEXT[] DEFAULT ARRAY[]::TEXT[],
     ranker ranker_type NOT NULL DEFAULT 'colpali',
     vespa_host VARCHAR(255),
@@ -54,8 +56,7 @@ If there are no relevant visual elements, provide an empty string for the visual
 Here is the document image to analyze:
 Generate the queries based on this image and provide the response in the specified JSON format.
 Only return JSON. Don''t return any extra explanation text.',
-    FOREIGN KEY (user_id) REFERENCES "user"(user_id)
+    FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );
 
--- Create index on foreign key for performance
 CREATE INDEX idx_user_document_user_id ON user_document(user_id);
