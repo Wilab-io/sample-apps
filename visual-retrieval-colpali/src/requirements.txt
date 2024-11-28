@@ -538,3 +538,7 @@ xxhash==3.5.0
     # via datasets
 yarl==1.13.1
     # via aiohttp
+bcrypt
+sqlalchemy[asyncio]>=2.0.0
+asyncpg>=0.29.0
+alembic>=1.13.0  # For database migrations

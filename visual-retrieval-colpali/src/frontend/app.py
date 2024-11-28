@@ -36,7 +36,7 @@ check_input_script = Script(
             const input = document.getElementById('search-input');
             const button = document.querySelector('[data-button="search-button"]');
             const radioGroupItems = document.querySelectorAll('button[data-ref="radio-item"]');  // Get all radio buttons
-            
+
             function checkInputValue() {
                 const isInputEmpty = input.value.trim() === "";
                 button.disabled = isInputEmpty;  // Disable the submit button
@@ -56,10 +56,10 @@ image_swapping = Script(
     """
     document.addEventListener('click', function (e) {
         if (e.target.classList.contains('sim-map-button') || e.target.classList.contains('reset-button')) {
-            const imgContainer = e.target.closest('.relative'); 
+            const imgContainer = e.target.closest('.relative');
             const overlayContainer = imgContainer.querySelector('.overlay-container');
             const newSrc = e.target.getAttribute('data-image-src');
-    
+
             // If it's a reset button, remove the overlay image
             if (e.target.classList.contains('reset-button')) {
                 overlayContainer.innerHTML = '';  // Clear the overlay container, showing only the full image
@@ -71,7 +71,7 @@ image_swapping = Script(
                 overlayContainer.innerHTML = '';  // Clear any previous overlay
                 overlayContainer.appendChild(img);  // Add the new overlay image
             }
-    
+
             // Toggle active class on buttons
             const activeButton = document.querySelector('.sim-map-button.active');
             if (activeButton) {
@@ -91,7 +91,7 @@ toggle_text_content = Script(
         const textColumn = document.getElementById(`text-column-${idx}`);
         const imageTextColumns = document.getElementById(`image-text-columns-${idx}`);
         const toggleButton = document.getElementById(`toggle-button-${idx}`);
-    
+
         if (textColumn.classList.contains('md-grid-text-column')) {
           // Hide the text column
           textColumn.classList.remove('md-grid-text-column');
