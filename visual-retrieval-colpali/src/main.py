@@ -146,7 +146,11 @@ async def keepalive():
 
 @app.on_event("startup")
 async def startup_event():
-    await init_admin_user(logger)
+    try:
+        await init_admin_user(logger)
+    except SystemExit:
+        logger.error("Application Startup Failed")
+        raise RuntimeError("Failed to initialize application")
 
 
 def generate_query_id(query, ranking_value):
