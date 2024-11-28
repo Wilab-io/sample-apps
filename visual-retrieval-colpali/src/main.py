@@ -49,6 +49,7 @@ from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
 from backend.init_db import init_admin_user
+from frontend.components.my_documents import MyDocuments
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -476,6 +477,26 @@ async def login(request, username: str, password: str):
         except Exception as e:
             logger.error("Login error: %s", str(e))
             return Login(error_message="An error occurred during login. Please try again.")
+
+
+@rt("/my-documents")
+@login_required
+async def get_my_documents(request):
+    user_id = request.session["user_id"]
+    logger.debug(f"Fetching documents for user_id: {user_id}")
+    documents = await app.db.get_user_documents(user_id)
+    logger.debug(f"Found {len(documents) if documents else 0} documents")
+    return await Layout(
+        Main(await MyDocuments(documents=documents)()),
+        request=request
+    )
+
+
+@rt("/logout")
+async def logout(request):
+    if "user_id" in request.session:
+        del request.session["user_id"]
+    return Redirect("/login")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

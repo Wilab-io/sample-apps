@@ -6,8 +6,9 @@ from uuid import UUID
 import os
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
-from .models import User
+from .models import User, UserDocument
 from .base import Base
+import logging
 
 # Connection URL
 DATABASE_URL = (
@@ -64,3 +65,15 @@ class Database:
             str(CreateTable(table).compile(engine))
             for table in Base.metadata.tables.values()
         )
+
+    async def get_user_documents(self, user_id: UUID):
+        """Get all documents for a user"""
+        logger = logging.getLogger("vespa_app")
+        logger.debug(f"Database: Fetching documents for user_id: {user_id}")
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(UserDocument).where(UserDocument.user_id == user_id)
+            )
+            documents = result.scalars().all()
+            logger.debug(f"Database: Found {len(documents)} documents")
+            return documents
