@@ -16,13 +16,13 @@ def Login(error_message=None):
                     type="text",
                     placeholder="Username",
                     name="username",
-                    cls="w-full p-4 mb-4 border rounded-[20px] focus:outline-none focus:border-black dark:bg-gray-800 dark:border-gray-700"
+                    cls="w-full p-4 mb-4 border rounded-[10px] focus:outline-none focus:border-black dark:bg-gray-800 dark:border-gray-700"
                 ),
                 Input(
                     type="password",
                     placeholder="Password",
                     name="password",
-                    cls="w-full p-4 mb-6 border rounded-[20px] focus:outline-none focus:border-black dark:bg-gray-800 dark:border-gray-700"
+                    cls="w-full p-4 mb-6 border rounded-[10px] focus:outline-none focus:border-black dark:bg-gray-800 dark:border-gray-700"
                 ),
                 P(
                     error_message,
@@ -31,9 +31,9 @@ def Login(error_message=None):
                 Button(
                     "Login",
                     type="submit",
-                    cls="w-full p-4 bg-black text-white rounded-[20px] hover:bg-gray-800 transition-colors"
+                    cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors"
                 ),
-                cls="bg-white dark:bg-gray-900 p-8 rounded-[20px] shadow-lg w-full max-w-md",
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-lg w-full max-w-md",
                 hx_post="/api/login",
                 hx_target="#login-form",
                 hx_swap="outerHTML",
@@ -41,8 +41,8 @@ def Login(error_message=None):
                 hx_indicator="#login-form",
                 hx_redirect="/"
             ),
-            cls="flex flex-col items-center justify-center min-h-screen w-full max-w-screen-xl mx-auto px-4"
+            cls="flex flex-col items-center justify-center h-[calc(100vh-55px)] w-full max-w-screen-xl mx-auto px-4"
         ),
-        cls="w-full h-full bg-gray-50 dark:bg-gray-950",
+        cls="w-full bg-gray-50 dark:bg-gray-950 min-h-0",
         id="login-form"
     )
