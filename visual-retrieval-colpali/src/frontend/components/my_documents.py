@@ -17,13 +17,13 @@ class MyDocuments:
     async def __call__(self):
         return Div(
             H1("Uploaded documents", cls="text-4xl font-bold mb-8 text-center"),
-            Div(
-                Button(
-                    "Upload new",
-                    cls="bg-black text-white px-6 py-2 rounded-[10px] hover:bg-gray-800",
-                ),
-                cls="flex justify-end mb-4"
-            ),
+            # Div(
+            #     Button(
+            #         "Upload new",
+            #         cls="bg-black text-white px-6 py-2 rounded-[10px] hover:bg-gray-800",
+            #     ),
+            #     cls="flex justify-end mb-4"
+            # ),
             Div(
                 Table(
                     TableHeader(
