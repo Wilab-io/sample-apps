@@ -154,7 +154,7 @@ async def Links(request=None):
                         username,
                         cls="text-sm text-black dark:text-white font-medium"
                     ),
-                    cls="flex items-center cursor-pointer hover:opacity-80 pb-1"
+                    cls="flex items-center cursor-pointer hover:opacity-80"
                 ),
                 Div(
                     A(
@@ -168,7 +168,7 @@ async def Links(request=None):
                         href="/logout",
                         cls="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700 rounded-md"
                     ),
-                    cls="absolute right-0 top-[calc(100%-4px)] w-48 py-1 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 rounded-[10px] shadow-lg"
+                    cls="absolute right-0 w-48 py-1 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 rounded-[10px] shadow-lg"
                 ),
                 cls="relative group"
             ),
