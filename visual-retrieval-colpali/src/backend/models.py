@@ -19,7 +19,7 @@ class User(Base):
 class UserDocument(Base):
     __tablename__ = "user_document"
 
-    document_id: Mapped[str] = mapped_column(String, primary_key=True)
+    document_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("app_user.user_id"), nullable=False)
     document_name: Mapped[str] = mapped_column(String, nullable=False)
     upload_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())

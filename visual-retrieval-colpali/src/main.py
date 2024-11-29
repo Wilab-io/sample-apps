@@ -498,17 +498,35 @@ async def logout(request):
         del request.session["user_id"]
     return Redirect("/login")
 
+STORAGE_DIR = Path("storage/user_documents")
 
-@rt("/upload-dialog")
+@rt("/upload-files", methods=["POST"])
 @login_required
-async def get_upload_dialog(request):
-    return await MyDocuments().upload_dialog()
+async def upload_files(request):
+    logger.info("Upload files endpoint called")
+    user_id = request.session["user_id"]
 
+    try:
+        form = await request.form()
+        files = form.getlist("files")
+        logger.info(f"Received {len(files)} files")
 
-@rt("/close-dialog")
-@login_required
-async def close_dialog(request):
-    return Div(id="dialog")
+        for file in files:
+            if file.filename:
+                content = await file.read()
+                await app.db.add_user_document(
+                    user_id=user_id,
+                    document_name=file.filename,
+                    file_content=content
+                )
+
+        # Update frontend table
+        documents = await app.db.get_user_documents(user_id)
+        return MyDocuments(documents=documents).documents_table()
+
+    except Exception as e:
+        logger.error(f"Error during file upload: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
