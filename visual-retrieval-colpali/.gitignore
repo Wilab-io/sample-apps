@@ -14,3 +14,4 @@ src/static/sim_maps/
 embeddings/
 hf_dataset/
 postgres_data/
+storage/

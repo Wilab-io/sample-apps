@@ -4,6 +4,9 @@ from sqlalchemy.sql import func
 from .base import Base
 import uuid
 from typing import Optional
+from datetime import datetime
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Float
+from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "app_user"
@@ -11,14 +14,18 @@ class User(Base):
     user_id: Mapped[UUID] = mapped_column(UUID, primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    documents = relationship("UserDocument", back_populates="user")
 
 class UserDocument(Base):
     __tablename__ = "user_document"
 
-    document_id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[UUID] = mapped_column(UUID, nullable=False)
+    document_id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[UUID] = mapped_column(UUID, ForeignKey("app_user.user_id"), nullable=False)
     document_name: Mapped[str] = mapped_column(String, nullable=False)
-    upload_ts: Mapped[DateTime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    file_extension: Mapped[str] = mapped_column(String, nullable=False)
+    upload_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.current_timestamp())
+
+    user = relationship("User", back_populates="documents")
 
 class UserSettings(Base):
     __tablename__ = "user_settings"
