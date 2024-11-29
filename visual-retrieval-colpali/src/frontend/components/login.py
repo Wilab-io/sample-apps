@@ -33,7 +33,7 @@ def Login(error_message=None):
                     type="submit",
                     cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors"
                 ),
-                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-lg w-full max-w-md",
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md w-full max-w-md border border-gray-200 dark:border-gray-700",
                 hx_post="/api/login",
                 hx_target="#login-form",
                 hx_swap="outerHTML",
