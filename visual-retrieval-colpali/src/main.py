@@ -498,6 +498,18 @@ async def logout(request):
         del request.session["user_id"]
     return Redirect("/login")
 
+
+@rt("/upload-dialog")
+@login_required
+async def get_upload_dialog(request):
+    return await MyDocuments().upload_dialog()
+
+
+@rt("/close-dialog")
+@login_required
+async def close_dialog(request):
+    return Div(id="dialog")
+
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
     logger.info(f"Starting app with hot reload: {HOT_RELOAD}")
