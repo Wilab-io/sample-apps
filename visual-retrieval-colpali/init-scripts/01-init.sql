@@ -13,6 +13,7 @@ CREATE TABLE user_document (
     user_id UUID NOT NULL,
     document_name VARCHAR(255) NOT NULL,
     upload_ts TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    file_extension VARCHAR NOT NULL,
     FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );
 

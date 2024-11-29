@@ -86,10 +86,15 @@ class Database:
         logger.debug(f"Adding document {document_name} for user {user_id}")
 
         try:
+            file_ext = Path(document_name).suffix.lower()
+            if file_ext not in ['.pdf', '.png', '.jpg', '.jpeg']:
+                raise ValueError(f"Unsupported file type: {file_ext}")
+
             async with self.get_session() as session:
                 new_document = UserDocument(
                     user_id=UUID(user_id),
                     document_name=document_name,
+                    file_extension=file_ext,
                 )
                 session.add(new_document)
                 await session.commit()
@@ -98,7 +103,6 @@ class Database:
                 user_dir = STORAGE_DIR / str(user_id)
                 user_dir.mkdir(parents=True, exist_ok=True)
 
-                file_ext = Path(document_name).suffix
                 save_path = user_dir / f"{new_document.document_id}{file_ext}"
                 save_path.write_bytes(file_content)
 
@@ -117,7 +121,6 @@ class Database:
         logger.debug(f"Deleting document {document_id}")
 
         try:
-            # First get document info to know the user_id for file path
             async with self.get_session() as session:
                 result = await session.execute(
                     select(UserDocument).where(UserDocument.document_id == document_id)
@@ -129,7 +132,7 @@ class Database:
                     return
 
                 storage_dir = Path("storage/user_documents")
-                file_path = storage_dir / str(document.user_id) / f"{document_id}.pdf"
+                file_path = storage_dir / str(document.user_id) / f"{document_id}{document.file_extension}"
                 if file_path.exists():
                     file_path.unlink()
                     logger.info(f"Deleted file {file_path}")
