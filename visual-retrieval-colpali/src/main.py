@@ -528,6 +528,23 @@ async def upload_files(request):
         logger.error(f"Error during file upload: {str(e)}")
         raise
 
+@rt("/delete-document/{document_id}", methods=["DELETE"])
+@login_required
+async def delete_document(request, document_id: str):
+    logger.info(f"Delete document request for document_id: {document_id}")
+    user_id = request.session["user_id"]
+
+    try:
+        await app.db.delete_document(document_id)
+
+        # Return updated table
+        documents = await app.db.get_user_documents(user_id)
+        return MyDocuments(documents=documents).documents_table()
+
+    except Exception as e:
+        logger.error(f"Error deleting document: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
     logger.info(f"Starting app with hot reload: {HOT_RELOAD}")

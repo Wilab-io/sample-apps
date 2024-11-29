@@ -1,4 +1,4 @@
-from fasthtml.common import Button, Div, H1, Form, Input
+from fasthtml.common import Button, Div, H1, Form, Input, Img
 from shad4fast import (
     Table,
     TableBody,
@@ -25,6 +25,10 @@ class MyDocuments:
                         "Upload time",
                         cls="text-left p-4"
                     ),
+                    TableHead(
+                        "Actions",
+                        cls="text-left p-4"
+                    ),
                 )
             ),
             TableBody(
@@ -32,7 +36,7 @@ class MyDocuments:
                     TableRow(
                         TableCell(
                             "No documents uploaded",
-                            colSpan="2",
+                            colSpan="3",
                             cls="text-center p-4 text-muted-foreground"
                         )
                     )
@@ -45,6 +49,21 @@ class MyDocuments:
                         TableCell(
                             doc.upload_ts.strftime("%Y-%m-%d %H:%M"),
                             cls="p-4 text-muted-foreground"
+                        ),
+                        TableCell(
+                            Button(
+                                Img(
+                                    src="/static/img/trash.svg",
+                                    alt="Delete",
+                                    cls="h-4 w-4 dark:brightness-0 dark:invert"
+                                ),
+                                type="button",
+                                cls="hover:opacity-80",
+                                hx_delete=f"/delete-document/{doc.document_id}",
+                                hx_target="#documents-list",
+                                hx_confirm=f"Are you sure you want to delete {doc.document_name}?"
+                            ),
+                            cls="p-4"
                         ),
                     )
                     for doc in self.documents
@@ -71,7 +90,7 @@ class MyDocuments:
                 Button(
                     "Upload new",
                     type="button",
-                    cls="bg-black text-white px-6 py-2 rounded-[10px] hover:bg-gray-800",
+                    cls="bg-black dark:bg-gray-900 text-white px-6 py-2 rounded-[10px] hover:opacity-80",
                     onclick="document.getElementById('file-input').click()"
                 ),
                 cls="flex justify-end mb-4"
