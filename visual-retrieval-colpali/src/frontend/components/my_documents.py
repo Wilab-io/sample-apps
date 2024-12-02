@@ -1,4 +1,4 @@
-from fasthtml.common import Button, Div, H1, Form, Input, Img, P
+from fasthtml.common import Button, Div, H1, Form, Input, P
 from shad4fast import (
     Table,
     TableBody,
@@ -8,7 +8,6 @@ from shad4fast import (
     TableRow,
 )
 from lucide_fasthtml import Lucide
-from datetime import datetime
 
 class MyDocuments:
     def __init__(self, documents=None):

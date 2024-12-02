@@ -50,6 +50,7 @@ from frontend.components.login import Login
 from backend.middleware import login_required
 from backend.init_db import init_admin_user
 from frontend.components.my_documents import MyDocuments
+from frontend.components.settings import Settings, TabContent
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -91,6 +92,9 @@ handler.setFormatter(
 logger.addHandler(handler)
 logger.setLevel(getattr(logging, LOG_LEVEL))
 
+# Add the settings.js script to the headers
+settings_js = Script(src="/static/js/settings.js")
+
 app, rt = fast_app(
     htmlkw={"cls": "grid h-full"},
     pico=False,
@@ -104,6 +108,7 @@ app, rt = fast_app(
         awesomplete_js,
         sselink,
         ShadHead(tw_cdn=False, theme_handle=True),
+        settings_js,  # Add our settings.js script
     ),
 )
 vespa_app: Vespa = VespaQueryClient(logger=logger)
@@ -544,6 +549,46 @@ async def delete_document(request, document_id: str):
     except Exception as e:
         logger.error(f"Error deleting document: {str(e)}")
         raise
+
+@rt("/settings")
+@login_required
+async def get(request):
+    user_id = request.session["user_id"]
+    questions = await request.app.db.get_demo_questions(user_id)
+
+    tab = request.query_params.get("tab", "demo-questions")
+    return await Layout(
+        Settings(active_tab=tab, questions=questions),
+        request=request
+    )
+
+@rt("/api/settings/demo-questions", methods=["POST"])
+@login_required
+async def update_demo_questions(request):
+    form_data = await request.form()
+    questions = []
+    i = 0
+
+    while f"question_{i}" in form_data:
+        question = form_data[f"question_{i}"].strip()
+        if question:
+            questions.append(question)
+        i += 1
+
+    if questions:
+        user_id = request.session["user_id"]
+        await request.app.db.update_demo_questions(user_id, questions)
+
+    return Redirect("/settings?tab=ranker")
+
+@rt("/settings/content")
+@login_required
+async def get_settings_content(request):
+    user_id = request.session["user_id"]
+    questions = await request.app.db.get_demo_questions(user_id)
+    tab = request.query_params.get("tab", "demo-questions")
+
+    return TabContent(tab, questions)
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
