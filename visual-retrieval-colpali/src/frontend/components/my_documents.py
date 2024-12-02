@@ -59,11 +59,7 @@ class MyDocuments:
                         ),
                         TableCell(
                             Button(
-                                Img(
-                                    src="/static/img/trash.svg",
-                                    alt="Delete",
-                                    cls="h-4 w-4 dark:brightness-0 dark:invert"
-                                ),
+                                Lucide("trash-2", cls="dark:brightness-0 dark:invert", size='20'),
                                 type="button",
                                 cls="hover:opacity-80",
                                 hx_delete=f"/delete-document/{doc.document_id}",
