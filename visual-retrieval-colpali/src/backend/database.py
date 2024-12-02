@@ -6,7 +6,7 @@ from uuid import UUID
 import os
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
-from .models import User, UserDocument
+from .models import User, UserDocument, UserSettings
 from .base import Base
 import logging
 from pathlib import Path
@@ -146,3 +146,29 @@ class Database:
         except Exception as e:
             logger.error(f"Error deleting document {document_id}: {str(e)}")
             raise
+
+    async def get_demo_questions(self, user_id: str) -> list[str]:
+        """Get demo questions for a user"""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == UUID(user_id))
+            )
+            settings = result.scalar_one_or_none()
+            return settings.demo_questions if settings else []
+
+    async def update_demo_questions(self, user_id: str, questions: list[str]):
+        """Update demo questions for a user"""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == UUID(user_id))
+            )
+            settings = result.scalar_one_or_none()
+            if settings:
+                settings.demo_questions = questions
+            else:
+                settings = UserSettings(
+                    user_id=UUID(user_id),
+                    demo_questions=questions
+                )
+                session.add(settings)
+            await session.commit()

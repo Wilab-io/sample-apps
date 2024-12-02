@@ -1,4 +1,4 @@
-from fasthtml.common import Button, Div, H1, Form, Input, Img, P
+from fasthtml.common import Button, Div, H1, Form, Input, P
 from shad4fast import (
     Table,
     TableBody,
@@ -8,7 +8,6 @@ from shad4fast import (
     TableRow,
 )
 from lucide_fasthtml import Lucide
-from datetime import datetime
 
 class MyDocuments:
     def __init__(self, documents=None):
@@ -59,11 +58,7 @@ class MyDocuments:
                         ),
                         TableCell(
                             Button(
-                                Img(
-                                    src="/static/img/trash.svg",
-                                    alt="Delete",
-                                    cls="h-4 w-4 dark:brightness-0 dark:invert"
-                                ),
+                                Lucide("trash-2", cls="dark:brightness-0 dark:invert", size='20'),
                                 type="button",
                                 cls="hover:opacity-80",
                                 hx_delete=f"/delete-document/{doc.document_id}",

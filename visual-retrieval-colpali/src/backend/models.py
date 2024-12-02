@@ -1,12 +1,10 @@
-from sqlalchemy import String, DateTime, ARRAY, Enum, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Integer, Text, Float
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
 import uuid
 from typing import Optional
 from datetime import datetime
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Float
-from sqlalchemy.orm import relationship
 
 class User(Base):
     __tablename__ = "app_user"
@@ -30,13 +28,13 @@ class UserDocument(Base):
 class UserSettings(Base):
     __tablename__ = "user_settings"
 
-    user_id: Mapped[UUID] = mapped_column(UUID, primary_key=True)
-    demo_questions: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
-    ranker: Mapped[str] = mapped_column(Enum('colpali', 'bm25', 'hybrid-colpali-bm25', name='ranker_type'), nullable=False, default='colpali')
-    vespa_host: Mapped[Optional[str]] = mapped_column(String)
-    vespa_port: Mapped[Optional[int]] = mapped_column(String)
-    vespa_token: Mapped[Optional[str]] = mapped_column(String)
-    gemini_token: Mapped[Optional[str]] = mapped_column(String)
-    vespa_cloud_endpoint: Mapped[Optional[str]] = mapped_column(String)
-    schema: Mapped[Optional[str]] = mapped_column(String)
-    prompt: Mapped[Optional[str]] = mapped_column(String)
+    user_id = Column(UUID, ForeignKey("app_user.user_id"), primary_key=True)
+    demo_questions = Column(ARRAY(String), default=list)
+    ranker = Column(Enum('colpali', 'bm25', 'hybrid-colpali-bm25', name='ranker_type'), default='colpali')
+    vespa_host = Column(String, nullable=True)
+    vespa_port = Column(Integer, nullable=True)
+    vespa_token = Column(String, nullable=True)
+    gemini_token = Column(String, nullable=True)
+    vespa_cloud_endpoint = Column(String, nullable=True)
+    schema = Column(String, nullable=True)
+    prompt = Column(Text, nullable=True)
