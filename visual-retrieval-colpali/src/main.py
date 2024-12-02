@@ -172,7 +172,7 @@ def serve_static(filepath: str):
 @rt("/")
 @login_required
 async def get(request):
-    return await Layout(Main(Home()), is_home=True, request=request)
+    return await Layout(Main(await Home(request)), is_home=True, request=request)
 
 
 @rt("/about-this-demo")
