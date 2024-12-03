@@ -108,7 +108,7 @@ app, rt = fast_app(
         awesomplete_js,
         sselink,
         ShadHead(tw_cdn=False, theme_handle=True),
-        settings_js,  # Add our settings.js script
+        settings_js,
     ),
 )
 vespa_app: Vespa = VespaQueryClient(logger=logger)

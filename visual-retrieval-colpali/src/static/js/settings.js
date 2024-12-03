@@ -56,27 +56,12 @@ function initializeSettingsPage() {
             const container = document.getElementById('questions-container');
             const inputs = container.querySelectorAll('input');
             const questionDiv = e.target.closest('.flex');
-            const isLastQuestion = questionDiv === inputs[inputs.length - 1].closest('.flex');
 
             // Always allow deletion if it's not the first question
             if (!questionDiv.querySelector('input').name.endsWith('_0')) {
                 questionDiv.remove();
                 updateInputNames();
                 updateSaveButtonState();
-
-                // If we just deleted the last question and there's still content in other questions,
-                // trigger a save to update the database
-                if (isLastQuestion) {
-                    const hasValidQuestions = Array.from(container.querySelectorAll('input'))
-                        .some(input => input.value.trim() !== '');
-
-                    if (hasValidQuestions) {
-                        const saveButton = document.querySelector('.enabled-next:not(.hidden)');
-                        if (saveButton) {
-                            saveButton.click();
-                        }
-                    }
-                }
             }
         }
     });
