@@ -957,6 +957,14 @@ body {
   cursor: pointer;
 }
 
+.cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.cursor-default {
+  cursor: default;
+}
+
 .resize {
   resize: both;
 }
@@ -1487,6 +1495,10 @@ body {
 
 .opacity-0 {
   opacity: 0;
+}
+
+.opacity-50 {
+  opacity: 0.5;
 }
 
 .shadow-lg {

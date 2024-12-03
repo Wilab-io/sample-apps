@@ -6,18 +6,13 @@ def TabButton(text: str, value: str, active_tab: str):
     return Div(
         text,
         cls=f"""
-            px-4 py-2 rounded-[10px] cursor-pointer
+            px-4 py-2 rounded-[10px]
             {
                 'bg-white dark:bg-gray-900 text-black dark:text-white' if is_active
-                else 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                else 'text-gray-500 dark:text-gray-400 opacity-50'
             }
-        """,
-        **{
-            "hx-get": f"/settings/content?tab={value}",
-            "hx-push-url": f"/settings?tab={value}",
-            "hx-target": "#settings-content",
-            "hx-swap": "outerHTML"
-        }
+            {'cursor-default'}  # Never show pointer cursor since tabs aren't clickable
+        """
     )
 
 def TabButtons(active_tab: str):
