@@ -50,6 +50,7 @@ from frontend.components.login import Login
 from backend.middleware import login_required
 from backend.init_db import init_admin_user
 from frontend.components.my_documents import MyDocuments
+from frontend.components.settings import Settings, TabContent
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -91,6 +92,9 @@ handler.setFormatter(
 logger.addHandler(handler)
 logger.setLevel(getattr(logging, LOG_LEVEL))
 
+# Add the settings.js script to the headers
+settings_js = Script(src="/static/js/settings.js")
+
 app, rt = fast_app(
     htmlkw={"cls": "grid h-full"},
     pico=False,
@@ -104,6 +108,7 @@ app, rt = fast_app(
         awesomplete_js,
         sselink,
         ShadHead(tw_cdn=False, theme_handle=True),
+        settings_js,
     ),
 )
 vespa_app: Vespa = VespaQueryClient(logger=logger)
@@ -167,7 +172,7 @@ def serve_static(filepath: str):
 @rt("/")
 @login_required
 async def get(request):
-    return await Layout(Main(Home()), is_home=True, request=request)
+    return await Layout(Main(await Home(request)), is_home=True, request=request)
 
 
 @rt("/about-this-demo")
@@ -544,6 +549,64 @@ async def delete_document(request, document_id: str):
     except Exception as e:
         logger.error(f"Error deleting document: {str(e)}")
         raise
+
+@rt("/settings")
+@login_required
+async def get(request):
+    user_id = request.session["user_id"]
+    tab = request.query_params.get("tab", "demo-questions")
+    settings = await request.app.db.get_user_settings(user_id)
+
+    return await Layout(
+        Settings(
+            active_tab=tab,
+            questions=settings.demo_questions,
+            ranker=settings.ranker
+        ),
+        request=request
+    )
+
+@rt("/settings/content")
+@login_required
+async def get_settings_content(request):
+    user_id = request.session["user_id"]
+    tab = request.query_params.get("tab", "demo-questions")
+    settings = await request.app.db.get_user_settings(user_id)
+
+    return TabContent(
+        tab,
+        questions=settings.demo_questions,
+        ranker=settings.ranker if tab == "ranker" else None
+    )
+
+@rt("/api/settings/demo-questions", methods=["POST"])
+@login_required
+async def update_demo_questions(request):
+    form_data = await request.form()
+    questions = []
+    i = 0
+
+    while f"question_{i}" in form_data:
+        question = form_data[f"question_{i}"].strip()
+        if question:
+            questions.append(question)
+        i += 1
+
+    if questions:
+        user_id = request.session["user_id"]
+        await request.app.db.update_demo_questions(user_id, questions)
+
+    return Redirect("/settings?tab=ranker")
+
+@rt("/api/settings/ranker", methods=["POST"])
+@login_required
+async def update_ranker(request):
+    user_id = request.session["user_id"]
+    form = await request.form()
+    ranker = form.get("ranker", "colpali")
+    await request.app.db.update_user_ranker(user_id, ranker)
+
+    return Redirect("/settings?tab=connection")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

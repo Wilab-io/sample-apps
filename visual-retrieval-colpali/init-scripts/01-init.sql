@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TYPE ranker_type AS ENUM ('colpali', 'bm25', 'hybrid-colpali-bm25');
+CREATE TYPE ranker_type AS ENUM ('colpali', 'bm25', 'hybrid');
 
 CREATE TABLE app_user (
     user_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
