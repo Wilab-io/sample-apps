@@ -198,78 +198,32 @@ def ShareButtons():
     )
 
 
-def SearchBox(with_border=False, query_value="", ranking_value="hybrid"):
-    grid_cls = "grid gap-2 items-center p-3 bg-muted w-full"
+class SearchBox:
+    def __init__(self, query_value: str = "", ranking_value: str = ""):
+        self.query_value = query_value
+        self.ranking_value = ranking_value
 
-    if with_border:
-        grid_cls = "grid gap-2 p-3 rounded-md border border-input bg-muted w-full ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-input"
-
-    return Form(
-        Div(
-            Lucide(
-                icon="search", cls="absolute left-2 top-2 text-muted-foreground z-10"
-            ),
-            Input(
-                placeholder="Enter your search query...",
-                name="query",
-                value=query_value,
-                id="search-input",
-                cls="text-base pl-10 border-transparent ring-offset-transparent ring-0 focus-visible:ring-transparent bg-white dark:bg-background awesomplete",
-                data_list="#suggestions",
-                style="font-size: 1rem",
-                autofocus=True,
-            ),
-            cls="relative",
-        ),
-        Div(
-            Div(
-                Div(
-                    Span("Ranking by:", cls="text-muted-foreground text-xs font-semibold"),
-                    RadioGroup(
-                        Div(
-                            RadioGroupItem(value="colpali", id="colpali"),
-                            Label("ColPali", htmlFor="ColPali"),
-                            cls="flex items-center space-x-2",
-                        ),
-                        Div(
-                            RadioGroupItem(value="bm25", id="bm25"),
-                            Label("BM25", htmlFor="BM25"),
-                            cls="flex items-center space-x-2",
-                        ),
-                        Div(
-                            RadioGroupItem(value="hybrid", id="hybrid"),
-                            Label("Hybrid ColPali + BM25", htmlFor="Hybrid ColPali + BM25"),
-                            cls="flex items-center space-x-2",
-                        ),
-                        name="ranking",
-                        default_value=ranking_value,
-                        cls="grid-flow-col gap-x-5 text-muted-foreground",
-                        # Submit form when radio button is clicked
-                    ),
-                    cls="grid grid-flow-col items-center gap-x-3 border border-input px-3 rounded-sm",
+    def __ft__(self):
+        return Div(
+            Form(
+                Input(
+                    type="search",
+                    name="query",
+                    placeholder="Search...",
+                    value=self.query_value,
+                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background",
+                    autofocus=True,
                 ),
-                Button(
-                    Lucide(icon="arrow-right", size="21"),
-                    size="sm",
-                    type="submit",
-                    data_button="search-button",
-                    disabled=True,
+                P(
+                    f"Ranking by: {self.ranking_value.title()}",
+                    cls="text-sm text-muted-foreground mt-2"
                 ),
-                cls="flex justify-between",
+                cls="w-full max-w-2xl mx-auto",
+                action=f"/search?ranking={self.ranking_value}",
+                method="GET"
             ),
-            check_input_script,
-            autocomplete_script,
-            submit_form_on_radio_change,
-            action=f"/search?query={quote_plus(query_value)}&ranking={quote_plus(ranking_value)}",
-            method="GET",
-            hx_get="/fetch_results",  # As the component is a form, input components query and ranking are sent as query parameters automatically, see https://htmx.org/docs/#parameters
-            hx_trigger="load",
-            hx_target="#search-results",
-            hx_swap="outerHTML",
-            hx_indicator="#loading-indicator",
-            cls=grid_cls,
+            cls="py-8 w-full"
         )
-    )
 
 
 async def SampleQueries(request=None):
@@ -321,11 +275,14 @@ def Hero():
 
 
 async def Home(request=None):
+    settings = await request.app.db.get_user_settings(request.session["user_id"])
+    ranker = settings.ranker.value if hasattr(settings.ranker, 'value') else settings.ranker
+
     return Div(
         Div(
             Hero(),
-            SearchBox(with_border=True),
-            await SampleQueries(request),  # Need to await since it's async
+            SearchBox(ranking_value=ranker),
+            await SampleQueries(request),
             ShareButtons(),
             cls="grid gap-8 content-start mt-[13vh]",
         ),
