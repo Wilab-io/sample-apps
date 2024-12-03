@@ -6,7 +6,7 @@ from uuid import UUID
 import os
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
-from .models import User, UserDocument, UserSettings
+from .models import User, UserDocument, UserSettings, RankerType
 from .base import Base
 import logging
 from pathlib import Path
@@ -171,4 +171,45 @@ class Database:
                     demo_questions=questions
                 )
                 session.add(settings)
+            await session.commit()
+
+    async def get_user_settings(self, user_id: str) -> UserSettings:
+        """Get user settings, creating default settings if they don't exist"""
+        async with self.get_session() as session:
+            user_id_uuid = UUID(user_id)
+
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
+            )
+            settings = result.scalar_one_or_none()
+
+            if not settings:
+                settings = UserSettings(
+                    user_id=user_id_uuid,
+                    ranker=RankerType.colpali
+                )
+                session.add(settings)
+                await session.commit()
+
+            return settings
+
+    async def update_user_ranker(self, user_id: str, ranker: str) -> None:
+        """Update user's ranker setting"""
+        async with self.get_session() as session:
+            user_id_uuid = UUID(user_id)
+
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
+            )
+            settings = result.scalar_one_or_none()
+
+            if settings:
+                settings.ranker = RankerType[ranker]
+            else:
+                settings = UserSettings(
+                    user_id=user_id_uuid,
+                    ranker=RankerType[ranker]
+                )
+                session.add(settings)
+
             await session.commit()

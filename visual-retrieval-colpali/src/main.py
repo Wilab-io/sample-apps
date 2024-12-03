@@ -554,12 +554,29 @@ async def delete_document(request, document_id: str):
 @login_required
 async def get(request):
     user_id = request.session["user_id"]
-    questions = await request.app.db.get_demo_questions(user_id)
-
     tab = request.query_params.get("tab", "demo-questions")
+    settings = await request.app.db.get_user_settings(user_id)
+
     return await Layout(
-        Settings(active_tab=tab, questions=questions),
+        Settings(
+            active_tab=tab,
+            questions=settings.demo_questions,
+            ranker=settings.ranker
+        ),
         request=request
+    )
+
+@rt("/settings/content")
+@login_required
+async def get_settings_content(request):
+    user_id = request.session["user_id"]
+    tab = request.query_params.get("tab", "demo-questions")
+    settings = await request.app.db.get_user_settings(user_id)
+
+    return TabContent(
+        tab,
+        questions=settings.demo_questions,
+        ranker=settings.ranker if tab == "ranker" else None
     )
 
 @rt("/api/settings/demo-questions", methods=["POST"])
@@ -581,14 +598,15 @@ async def update_demo_questions(request):
 
     return Redirect("/settings?tab=ranker")
 
-@rt("/settings/content")
+@rt("/api/settings/ranker", methods=["POST"])
 @login_required
-async def get_settings_content(request):
+async def update_ranker(request):
     user_id = request.session["user_id"]
-    questions = await request.app.db.get_demo_questions(user_id)
-    tab = request.query_params.get("tab", "demo-questions")
+    form = await request.form()
+    ranker = form.get("ranker", "colpali")
+    await request.app.db.update_user_ranker(user_id, ranker)
 
-    return TabContent(tab, questions)
+    return Redirect("/settings?tab=connection")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

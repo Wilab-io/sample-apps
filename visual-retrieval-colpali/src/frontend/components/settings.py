@@ -1,4 +1,4 @@
-from fasthtml.common import Div, H1, H2, Input, Main, Button, P
+from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form
 from lucide_fasthtml import Lucide
 
 def TabButton(text: str, value: str, active_tab: str):
@@ -33,21 +33,21 @@ def TabButtons(active_tab: str):
         id="tab-buttons"
     )
 
-def TabContent(active_tab: str, questions: list[str] = None):
+def TabContent(active_tab: str, questions: list[str] = None, ranker: str = None):
     return Div(
         TabButtons(active_tab),
         Div(
-            _get_tab_content(active_tab, questions),
+            _get_tab_content(active_tab, questions, ranker),
             cls="bg-white dark:bg-gray-900 p-4 rounded-[10px] shadow-md w-full border border-gray-200 dark:border-gray-700",
         ),
         id="settings-content"
     )
 
-def _get_tab_content(active_tab: str, questions: list[str] = None):
+def _get_tab_content(active_tab: str, questions: list[str] = None, ranker: str = None):
     if active_tab == "demo-questions":
         return DemoQuestions(questions or [])
     elif active_tab == "ranker":
-        return "Ranker settings coming soon..."
+        return RankerSettings(ranker=ranker)
     elif active_tab == "connection":
         return "Connection settings coming soon..."
     elif active_tab == "application-package":
@@ -120,11 +120,77 @@ def DemoQuestions(questions: list[str]):
         cls="space-y-4"
     )
 
-def Settings(active_tab: str = "demo-questions", questions: list[str] = None):
+def RankerSettings(ranker: str = "colpali"):
+    if hasattr(ranker, 'value'):
+        ranker = ranker.value
+
+    return Div(
+        Div(
+            H2("Results ranker selection", cls="text-xl font-semibold px-4 mb-4"),
+            cls="border-b border-gray-200 dark:border-gray-700 -mx-4 mb-6"
+        ),
+        Form(
+            Div(
+                Div(
+                    Input(
+                        type="radio",
+                        id="colpali",
+                        name="ranker",
+                        value="colpali",
+                        checked=ranker == "colpali",
+                        cls="mr-2"
+                    ),
+                    "ColPali",
+                    cls="flex items-center space-x-2"
+                ),
+                Div(
+                    Input(
+                        type="radio",
+                        id="bm25",
+                        name="ranker",
+                        value="bm25",
+                        checked=ranker == "bm25",
+                        cls="mr-2"
+                    ),
+                    "BM25",
+                    cls="flex items-center space-x-2 mb-4"
+                ),
+                Div(
+                    Input(
+                        type="radio",
+                        id="hybrid",
+                        name="ranker",
+                        value="hybrid",
+                        checked=ranker == "hybrid",
+                        cls="mr-2"
+                    ),
+                    "Hybrid ColPali + BM25",
+                    cls="flex items-center space-x-2 mb-4"
+                ),
+                cls="space-y-2 mb-8"
+            ),
+            Div(
+                Button(
+                    "Next",
+                    cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
+                    id="save-ranker",
+                    type="submit"
+                ),
+                cls="flex justify-end w-full"
+            ),
+            **{
+                "hx-post": "/api/settings/ranker",
+                "hx-trigger": "submit"
+            }
+        ),
+        cls="space-y-4"
+    )
+
+def Settings(active_tab: str = "demo-questions", questions: list[str] = None, ranker: str = None):
     return Main(
         H1("Settings", cls="text-4xl font-bold mb-8 text-center"),
         Div(
-            TabContent(active_tab, questions),
+            TabContent(active_tab, questions, ranker),
             cls="w-full max-w-screen-xl mx-auto"
         ),
         cls="container mx-auto px-4 py-8 w-full min-h-0"

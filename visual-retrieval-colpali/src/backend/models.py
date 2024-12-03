@@ -1,10 +1,16 @@
-from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Integer, Text, Float
+from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Integer, Text, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
 import uuid
 from typing import Optional
 from datetime import datetime
+import enum
+
+class RankerType(enum.Enum):
+    colpali = "colpali"
+    bm25 = "bm25"
+    hybrid = "hybrid"
 
 class User(Base):
     __tablename__ = "app_user"
@@ -30,7 +36,11 @@ class UserSettings(Base):
 
     user_id = Column(UUID, ForeignKey("app_user.user_id"), primary_key=True)
     demo_questions = Column(ARRAY(String), default=list)
-    ranker = Column(Enum('colpali', 'bm25', 'hybrid-colpali-bm25', name='ranker_type'), default='colpali')
+    ranker = Column(
+        Enum(RankerType, name="ranker_type"),
+        nullable=False,
+        default=RankerType.colpali
+    )
     vespa_host = Column(String, nullable=True)
     vespa_port = Column(Integer, nullable=True)
     vespa_token = Column(String, nullable=True)
