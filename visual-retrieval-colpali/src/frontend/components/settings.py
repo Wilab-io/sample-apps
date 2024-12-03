@@ -1,4 +1,4 @@
-from fasthtml.common import Div, H1, H2, Input, Main, Button
+from fasthtml.common import Div, H1, H2, Input, Main, Button, P
 from lucide_fasthtml import Lucide
 
 def TabButton(text: str, value: str, active_tab: str):
@@ -74,7 +74,8 @@ def DemoQuestions(questions: list[str]):
                     Input(
                         value=q,
                         cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                        name=f"question_{i}"
+                        name=f"question_{i}",
+                        **{"data-original": q}
                     ),
                     Button(
                         Lucide("trash-2", size=20),
@@ -96,22 +97,30 @@ def DemoQuestions(questions: list[str]):
             cls="mt-1 ml-auto rounded-[10px] border border-gray-200 dark:border-gray-700 px-3 py-2"
         ),
         Div(
+            Div(
+                P(
+                    "Unsaved changes",
+                    cls="text-red-500 text-sm hidden text-right mt-6",
+                    id="unsaved-changes"
+                ),
+                cls="flex-grow self-center"
+            ),
             Button(
                 "Next",
-                cls="mt-6 ml-auto bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
+                cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
                 id="save-questions-disabled",
                 disabled=True,
             ),
             Button(
                 "Next",
-                cls="mt-6 ml-auto bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
+                cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
                 id="save-questions",
                 **{
                     "hx-post": "/api/settings/demo-questions",
                     "hx-trigger": "click"
                 }
             ),
-            cls="flex justify-end"
+            cls="flex items-center w-full gap-4"
         ),
         cls="space-y-4"
     )

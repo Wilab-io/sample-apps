@@ -53,15 +53,13 @@ function initializeSettingsPage() {
 
     document.addEventListener('click', function(e) {
         if (e.target.closest('.delete-question')) {
-            const container = document.getElementById('questions-container');
-            const inputs = container.querySelectorAll('input');
             const questionDiv = e.target.closest('.flex');
 
             // Always allow deletion if it's not the first question
             if (!questionDiv.querySelector('input').name.endsWith('_0')) {
                 questionDiv.remove();
                 updateInputNames();
-                updateSaveButtonState();
+                updateSaveButtonState(true);
             }
         }
     });
@@ -73,16 +71,30 @@ function initializeSettingsPage() {
         });
     }
 
-    function updateSaveButtonState() {
+    function updateSaveButtonState(is_deletion = false) {
         const inputs = questionsContainer.querySelectorAll('input');
         const hasValidQuestion = Array.from(inputs).some(input => input.value.trim() !== '');
+        var hasChanges = false;
+        if (is_deletion) {
+            hasChanges = true;
+        } else {
+            hasChanges = Array.from(inputs).some(input => {
+                const originalValue = input.getAttribute('data-original') || '';
+                return input.value.trim() !== originalValue.trim();
+            });
+        }
 
         const enabledButton = document.querySelector('.enabled-next');
         const disabledButton = document.querySelector('.disabled-next');
+        const unsavedChanges = document.getElementById('unsaved-changes');
 
         if (hasValidQuestion) {
             enabledButton.classList.remove('hidden');
             disabledButton.classList.add('hidden');
+
+            if (hasChanges) {
+                unsavedChanges.classList.remove('hidden');
+            }
 
             // Update form data to only include non-empty questions
             const form = document.createElement('form');
@@ -103,8 +115,22 @@ function initializeSettingsPage() {
         } else {
             enabledButton.classList.add('hidden');
             disabledButton.classList.remove('hidden');
+            unsavedChanges.classList.add('hidden');
         }
     }
 
     updateSaveButtonState();
 }
+
+document.addEventListener('htmx:afterSwap', function(event) {
+    if (event.detail.target.id === 'settings-content') {
+        const questionsContainer = document.getElementById('questions-container');
+        if (questionsContainer) {
+            questionsContainer.addEventListener('input', function(e) {
+                if (e.target.tagName === 'INPUT') {
+                    updateSaveButtonState();
+                }
+            });
+        }
+    }
+});
