@@ -10,6 +10,17 @@ document.addEventListener('htmx:afterSwap', function(event) {
 function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
+    const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
+
+    // Store original values when page loads
+    connectionInputs.forEach(input => {
+        input.setAttribute('data-original', input.value);
+        input.addEventListener('input', updateConnectionSaveButtonState);
+    });
+
+    if (connectionInputs.length > 0) {
+        updateConnectionSaveButtonState();
+    }
 
     if (questionsContainer) {
         questionsContainer.addEventListener('input', function(e) {
@@ -134,3 +145,43 @@ document.addEventListener('htmx:afterSwap', function(event) {
         }
     }
 });
+
+function updateConnectionSaveButtonState() {
+    const vespaHost = document.querySelector('input[name="vespa_host"]');
+    const vespaPort = document.querySelector('input[name="vespa_port"]');
+    const vespaToken = document.querySelector('input[name="vespa_token"]');
+    const geminiToken = document.querySelector('input[name="gemini_token"]');
+    const vespaCloudEndpoint = document.querySelector('input[name="vespa_cloud_endpoint"]');
+
+    const enabledButton = document.querySelector('#save-connection');
+    const disabledButton = document.querySelector('#save-connection-disabled');
+    const unsavedChanges = document.getElementById('connection-unsaved-changes');
+
+    if (!vespaHost || !vespaPort || !vespaToken || !geminiToken) return;
+
+    const isValid = vespaHost.value.trim() !== '' &&
+                   vespaPort.value.trim() !== '' &&
+                   vespaToken.value.trim() !== '' &&
+                   geminiToken.value.trim() !== '';
+
+    // Check if any field has changed from its original value
+    const hasChanges = [vespaHost, vespaPort, vespaToken, geminiToken, vespaCloudEndpoint].some(input => {
+        const originalValue = input.getAttribute('data-original') || '';
+        return input.value.trim() !== originalValue.trim();
+    });
+
+    if (isValid) {
+        enabledButton.classList.remove('hidden');
+        disabledButton.classList.add('hidden');
+
+        if (hasChanges) {
+            unsavedChanges.classList.remove('hidden');
+        } else {
+            unsavedChanges.classList.add('hidden');
+        }
+    } else {
+        enabledButton.classList.add('hidden');
+        disabledButton.classList.remove('hidden');
+        unsavedChanges.classList.add('hidden');
+    }
+}

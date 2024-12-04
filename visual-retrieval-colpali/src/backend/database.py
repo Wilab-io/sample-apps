@@ -213,3 +213,25 @@ class Database:
                 session.add(settings)
 
             await session.commit()
+
+    async def update_connection_settings(self, user_id: str, settings: dict) -> None:
+        """Update connection settings for a user"""
+        async with self.get_session() as session:
+            user_id_uuid = UUID(user_id)
+
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
+            )
+            user_settings = result.scalar_one_or_none()
+
+            if user_settings:
+                for key, value in settings.items():
+                    setattr(user_settings, key, value)
+            else:
+                user_settings = UserSettings(
+                    user_id=user_id_uuid,
+                    **settings
+                )
+                session.add(user_settings)
+
+            await session.commit()

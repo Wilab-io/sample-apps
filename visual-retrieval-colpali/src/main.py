@@ -560,8 +560,7 @@ async def get(request):
     return await Layout(
         Settings(
             active_tab=tab,
-            questions=settings.demo_questions,
-            ranker=settings.ranker
+            settings=settings
         ),
         request=request
     )
@@ -573,11 +572,7 @@ async def get_settings_content(request):
     tab = request.query_params.get("tab", "demo-questions")
     settings = await request.app.db.get_user_settings(user_id)
 
-    return TabContent(
-        tab,
-        questions=settings.demo_questions,
-        ranker=settings.ranker if tab == "ranker" else None
-    )
+    return TabContent(tab, settings)
 
 @rt("/api/settings/demo-questions", methods=["POST"])
 @login_required
@@ -607,6 +602,24 @@ async def update_ranker(request):
     await request.app.db.update_user_ranker(user_id, ranker)
 
     return Redirect("/settings?tab=connection")
+
+@rt("/api/settings/connection", methods=["POST"])
+@login_required
+async def update_connection_settings(request):
+    user_id = request.session["user_id"]
+    form = await request.form()
+
+    settings = {
+        'vespa_host': form.get('vespa_host'),
+        'vespa_port': int(form.get('vespa_port')) if form.get('vespa_port') else None,
+        'vespa_token': form.get('vespa_token'),
+        'gemini_token': form.get('gemini_token'),
+        'vespa_cloud_endpoint': form.get('vespa_cloud_endpoint')
+    }
+
+    await request.app.db.update_connection_settings(user_id, settings)
+
+    return Redirect("/settings?tab=application-package")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
