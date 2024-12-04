@@ -145,14 +145,10 @@ async def Links(request=None):
         Div(
             Div(
                 Div(
-                    Img(
-                        src="/static/img/user.svg",
-                        alt="User icon",
-                        cls="h-4 w-4 inline-block mr-2 dark:brightness-0 dark:invert"
-                    ),
+                    Lucide("circle-user-round", cls="dark:brightness-0 dark:invert"),
                     Span(
                         username,
-                        cls="text-sm text-black dark:text-white font-medium"
+                        cls="text-sm text-black dark:text-white font-medium ml-2"
                     ),
                     cls="flex items-center cursor-pointer hover:opacity-80"
                 ),
@@ -192,6 +188,13 @@ async def Links(request=None):
             target="_blank",
         ),
         Separator(orientation="vertical"),
+        Div(
+            A(
+                Lucide("cog", cls="dark:brightness-0 dark:invert"),
+                href="/settings",
+                cls="hover:opacity-80"
+            ),
+        ) if username else None,
         ThemeToggle(),
         cls="flex items-center space-x-2",
     )

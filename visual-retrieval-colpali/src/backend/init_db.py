@@ -29,7 +29,7 @@ async def init_admin_user(logger: logging.Logger):
                     logger.info("Creating admin user...")
                     admin_user = User(
                         username="admin",
-                        password_hash=hash_password("admin")  # Generate hash at runtime
+                        password_hash=hash_password("1")
                     )
                     session.add(admin_user)
                     await session.commit()
