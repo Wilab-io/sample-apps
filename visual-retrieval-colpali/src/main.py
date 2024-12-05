@@ -475,6 +475,7 @@ async def login(request, username: str, password: str):
                 return Login(error_message="Invalid password")
 
             request.session["user_id"] = str(user.user_id)
+            request.session["username"] = user.username
             logger.debug("Successful login for user: %s", username)
 
             return Redirect("/")
@@ -501,6 +502,7 @@ async def get_my_documents(request):
 async def logout(request):
     if "user_id" in request.session:
         del request.session["user_id"]
+        del request.session["username"]
     return Redirect("/login")
 
 STORAGE_DIR = Path("storage/user_documents")
