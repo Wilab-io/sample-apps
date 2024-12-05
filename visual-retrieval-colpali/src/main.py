@@ -555,12 +555,21 @@ async def delete_document(request, document_id: str):
 async def get(request):
     user_id = request.session["user_id"]
     tab = request.query_params.get("tab", "demo-questions")
+
+    if "username" not in request.session:
+        user = await request.app.db.get_user_by_id(user_id)
+        request.session["username"] = user.username if user else None
+
+    if request.session["username"] != "admin" and tab == "prompt":
+        tab = "demo-questions"
+
     settings = await request.app.db.get_user_settings(user_id)
 
     return await Layout(
         Settings(
             active_tab=tab,
-            settings=settings
+            settings=settings,
+            username=request.session["username"]
         ),
         request=request
     )
@@ -570,9 +579,21 @@ async def get(request):
 async def get_settings_content(request):
     user_id = request.session["user_id"]
     tab = request.query_params.get("tab", "demo-questions")
+
+    if "username" not in request.session:
+        user = await request.app.db.get_user_by_id(user_id)
+        request.session["username"] = user.username if user else None
+
+    if request.session["username"] != "admin" and tab == "prompt":
+        tab = "demo-questions"
+
     settings = await request.app.db.get_user_settings(user_id)
 
-    return TabContent(tab, settings)
+    return TabContent(
+        tab,
+        settings,
+        username=request.session["username"]
+    )
 
 @rt("/api/settings/demo-questions", methods=["POST"])
 @login_required
@@ -619,7 +640,36 @@ async def update_connection_settings(request):
 
     await request.app.db.update_connection_settings(user_id, settings)
 
-    return Redirect("/settings?tab=application-package")
+    return Redirect("/settings?tab=prompt")
+
+@rt("/api/settings/prompt", methods=["POST"])
+@login_required
+async def update_prompt_settings(request):
+    if request.session["username"] != "admin":
+        return Redirect("/settings?tab=demo-questions")
+
+    form = await request.form()
+    prompt = form.get('prompt')
+    await request.app.db.update_prompt_settings(request.session["user_id"], prompt)
+
+    return Redirect("/settings?tab=prompt")
+
+@rt("/login", methods=["POST"])
+async def login(request):
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+
+    user = await app.db.fetch_one(
+        select(User).where(User.username == username)
+    )
+
+    if user and verify_password(password, user["password_hash"]):
+        request.session["user_id"] = str(user["user_id"])
+        request.session["username"] = username
+        return Redirect("/")
+
+    return Redirect("/login?error=invalid")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

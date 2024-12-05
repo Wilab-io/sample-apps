@@ -186,7 +186,8 @@ class Database:
             if not settings:
                 settings = UserSettings(
                     user_id=user_id_uuid,
-                    ranker=RankerType.colpali
+                    ranker=RankerType.colpali,
+                    prompt=self.get_default_prompt()
                 )
                 session.add(settings)
                 await session.commit()

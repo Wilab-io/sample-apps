@@ -873,6 +873,10 @@ body {
   height: 27px;
 }
 
+.h-\[400px\] {
+  height: 400px;
+}
+
 .h-\[55px\] {
   height: 55px;
 }
@@ -917,6 +921,10 @@ body {
   max-width: 56rem;
 }
 
+.max-w-\[50\%\] {
+  max-width: 50%;
+}
+
 .max-w-md {
   max-width: 28rem;
 }
@@ -927,10 +935,6 @@ body {
 
 .max-w-screen-xl {
   max-width: 1280px;
-}
-
-.max-w-\[50\%\] {
-  max-width: 50%;
 }
 
 .flex-1 {
@@ -1805,6 +1809,10 @@ aside {
 .focus\:outline-none:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
+}
+
+.enabled\:hover\:opacity-80:hover:enabled {
+  opacity: 0.8;
 }
 
 .group:hover .group-hover\:visible {
