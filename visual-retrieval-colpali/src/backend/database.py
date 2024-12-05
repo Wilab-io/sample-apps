@@ -235,3 +235,57 @@ class Database:
                 session.add(user_settings)
 
             await session.commit()
+
+    async def update_prompt_settings(self, user_id: str, prompt: str) -> None:
+        """Update prompt settings for a user"""
+        async with self.get_session() as session:
+            user_id_uuid = UUID(user_id)
+
+            result = await session.execute(
+                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
+            )
+            user_settings = result.scalar_one_or_none()
+
+            if user_settings:
+                user_settings.prompt = prompt
+            else:
+                user_settings = UserSettings(
+                    user_id=user_id_uuid,
+                    prompt=prompt
+                )
+                session.add(user_settings)
+
+            await session.commit()
+
+    @staticmethod
+    def get_default_prompt() -> str:
+        return """You are an investor, stock analyst and financial expert. You will be presented an image of a document page from a report published by the Norwegian Government Pension Fund Global (GPFG). The report may be annual or quarterly reports, or policy reports, on topics such as responsible investment, risk etc.
+Your task is to generate retrieval queries and questions that you would use to retrieve this document (or ask based on this document) in a large corpus.
+Please generate 3 different types of retrieval queries and questions.
+A retrieval query is a keyword based query, made up of 2-5 words, that you would type into a search engine to find this document.
+A question is a natural language question that you would ask, for which the document contains the answer.
+The queries should be of the following types:
+1. A broad topical query: This should cover the main subject of the document.
+2. A specific detail query: This should cover a specific detail or aspect of the document.
+3. A visual element query: This should cover a visual element of the document, such as a chart, graph, or image.
+
+Important guidelines:
+- Ensure the queries are relevant for retrieval tasks, not just describing the page content.
+- Use a fact-based natural language style for the questions.
+- Frame the queries as if someone is searching for this document in a large corpus.
+- Make the queries diverse and representative of different search strategies.
+
+Format your response as a JSON object with the structure of the following example:
+{
+    "broad_topical_question": "What was the Responsible Investment Policy in 2019?",
+    "broad_topical_query": "responsible investment policy 2019",
+    "specific_detail_question": "What is the percentage of investments in renewable energy?",
+    "specific_detail_query": "renewable energy investments percentage",
+    "visual_element_question": "What is the trend of total holding value over time?",
+    "visual_element_query": "total holding value trend"
+}
+
+If there are no relevant visual elements, provide an empty string for the visual element question and query.
+Here is the document image to analyze:
+Generate the queries based on this image and provide the response in the specified JSON format.
+Only return JSON. Don't return any extra explanation text."""
