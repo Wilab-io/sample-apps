@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from asyncpg.exceptions import ConnectionDoesNotExistError, CannotConnectNowError, PostgresConnectionError
 import sys
 
-async def init_admin_user(logger: logging.Logger):
+async def init_default_users(logger: logging.Logger):
     try:
         # First create tables if they don't exist
         async with engine.begin() as conn:
@@ -38,7 +38,30 @@ async def init_admin_user(logger: logging.Logger):
                     logger.info("Admin user already exists")
 
             except Exception as e:
-                logger.error(f"Error in init_admin_user: {e}")
+                logger.error(f"Error in init_default_users: {e}")
+                raise
+
+        async with async_session() as session:
+            try:
+                result = await session.execute(
+                    select(User).where(User.username == "demo")
+                )
+                user = result.scalar_one_or_none()
+
+                if user is None:
+                    logger.info("Creating demo user...")
+                    demo_user = User(
+                        username="demo",
+                        password_hash=hash_password("1")
+                    )
+                    session.add(demo_user)
+                    await session.commit()
+                    logger.info("Demo user created successfully")
+                else:
+                    logger.info("Demo user already exists")
+
+            except Exception as e:
+                logger.error(f"Error in init_default_users: {e}")
                 raise
 
     except (ConnectionRefusedError, ConnectionDoesNotExistError,

@@ -48,7 +48,7 @@ from frontend.app import (
 from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
-from backend.init_db import init_admin_user
+from backend.init_db import init_default_users
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
 
@@ -153,7 +153,7 @@ async def keepalive():
 @app.on_event("startup")
 async def startup_event():
     try:
-        await init_admin_user(logger)
+        await init_default_users(logger)
     except SystemExit:
         logger.error("Application Startup Failed")
         raise RuntimeError("Failed to initialize application")
