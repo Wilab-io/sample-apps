@@ -612,7 +612,7 @@ async def update_demo_questions(request):
 
     if questions:
         user_id = request.session["user_id"]
-        await request.app.db.update_demo_questions(user_id, questions)
+        await request.app.db.update_settings(user_id, {'demo_questions': questions})
 
     return Redirect("/settings?tab=ranker")
 
@@ -621,8 +621,9 @@ async def update_demo_questions(request):
 async def update_ranker(request):
     user_id = request.session["user_id"]
     form = await request.form()
-    ranker = form.get("ranker", "colpali")
-    await request.app.db.update_user_ranker(user_id, ranker)
+    ranker = form.get("ranker")
+
+    await request.app.db.update_settings(user_id, {'ranker': ranker})
 
     return Redirect("/settings?tab=connection")
 
@@ -635,12 +636,28 @@ async def update_connection_settings(request):
     settings = {
         'vespa_host': form.get('vespa_host'),
         'vespa_port': int(form.get('vespa_port')) if form.get('vespa_port') else None,
-        'vespa_token': form.get('vespa_token'),
+        'vespa_token_id': form.get('vespa_token_id'),
+        'vespa_token_value': form.get('vespa_token_value'),
         'gemini_token': form.get('gemini_token'),
         'vespa_cloud_endpoint': form.get('vespa_cloud_endpoint')
     }
 
-    await request.app.db.update_connection_settings(user_id, settings)
+    await request.app.db.update_settings(user_id, settings)
+
+    return Redirect("/settings?tab=application-package")
+
+@rt("/api/settings/application-package", methods=["POST"])
+@login_required
+async def update_application_package_settings(request):
+    user_id = request.session["user_id"]
+    form = await request.form()
+
+    settings = {
+        'tenant_name': form.get('tenant_name'),
+        'app_name': form.get('app_name')
+    }
+
+    await request.app.db.update_settings(user_id, settings)
 
     return Redirect("/settings?tab=prompt")
 
@@ -652,7 +669,7 @@ async def update_prompt_settings(request):
 
     form = await request.form()
     prompt = form.get('prompt')
-    await request.app.db.update_prompt_settings(request.session["user_id"], prompt)
+    await request.app.db.update_settings(request.session["user_id"], {'prompt': prompt})
 
     return Redirect("/settings?tab=prompt")
 

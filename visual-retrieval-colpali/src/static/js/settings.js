@@ -10,7 +10,8 @@ document.addEventListener('htmx:afterSwap', function(event) {
 function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
-    const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
+    const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
+    const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
     // Initialize prompt textarea if it exists
@@ -28,6 +29,15 @@ function initializeSettingsPage() {
 
     if (connectionInputs.length > 0) {
         updateConnectionSaveButtonState();
+    }
+
+    applicationPackageInputs.forEach(input => {
+        input.setAttribute('data-original', input.value);
+        input.addEventListener('input', updateApplicationPackageSaveButtonState);
+    });
+
+    if (applicationPackageInputs.length > 0) {
+        updateApplicationPackageSaveButtonState();
     }
 
     if (questionsContainer) {
@@ -157,7 +167,8 @@ document.addEventListener('htmx:afterSwap', function(event) {
 function updateConnectionSaveButtonState() {
     const vespaHost = document.querySelector('input[name="vespa_host"]');
     const vespaPort = document.querySelector('input[name="vespa_port"]');
-    const vespaToken = document.querySelector('input[name="vespa_token"]');
+    const vespaTokenID = document.querySelector('input[name="vespa_token_id"]');
+    const vespaTokenValue = document.querySelector('input[name="vespa_token_value"]');
     const geminiToken = document.querySelector('input[name="gemini_token"]');
     const vespaCloudEndpoint = document.querySelector('input[name="vespa_cloud_endpoint"]');
 
@@ -165,15 +176,16 @@ function updateConnectionSaveButtonState() {
     const disabledButton = document.querySelector('#save-connection-disabled');
     const unsavedChanges = document.getElementById('connection-unsaved-changes');
 
-    if (!vespaHost || !vespaPort || !vespaToken || !geminiToken) return;
+  if (!vespaHost || !vespaPort || !vespaTokenID || !vespaTokenValue || !geminiToken) return;
 
     const isValid = vespaHost.value.trim() !== '' &&
-                   vespaPort.value.trim() !== '' &&
-                   vespaToken.value.trim() !== '' &&
-                   geminiToken.value.trim() !== '';
+                    vespaPort.value.trim() !== '' &&
+                    vespaTokenID.value.trim() !== '' &&
+                    vespaTokenValue.value.trim() !== '' &&
+                    geminiToken.value.trim() !== '';
 
     // Check if any field has changed from its original value
-    const hasChanges = [vespaHost, vespaPort, vespaToken, geminiToken, vespaCloudEndpoint].some(input => {
+    const hasChanges = [vespaHost, vespaPort, vespaTokenID, vespaTokenValue, geminiToken, vespaCloudEndpoint].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
     });
@@ -191,6 +203,41 @@ function updateConnectionSaveButtonState() {
         enabledButton.classList.add('hidden');
         disabledButton.classList.remove('hidden');
         unsavedChanges.classList.add('hidden');
+    }
+}
+
+function updateApplicationPackageSaveButtonState() {
+    const tenantName = document.querySelector('input[name="tenant_name"]');
+    const appName = document.querySelector('input[name="app_name"]');
+
+    const enabledButton = document.querySelector('#save-application-package');
+    const disabledButton = document.querySelector('#save-application-package-disabled');
+    const unsavedChanges = document.getElementById('application-package-unsaved-changes');
+
+    if (!tenantName || !appName) return;
+
+    const isValid = tenantName.value.trim() !== '' &&
+      appName.value.trim() !== '';
+
+    // Check if any field has changed from its original value
+    const hasChanges = [tenantName, appName].some(input => {
+      const originalValue = input.getAttribute('data-original') || '';
+      return input.value.trim() !== originalValue.trim();
+    });
+
+    if (isValid) {
+      enabledButton.classList.remove('hidden');
+      disabledButton.classList.add('hidden');
+
+      if (hasChanges) {
+        unsavedChanges.classList.remove('hidden');
+      } else {
+        unsavedChanges.classList.add('hidden');
+      }
+    } else {
+      enabledButton.classList.add('hidden');
+      disabledButton.classList.remove('hidden');
+      unsavedChanges.classList.add('hidden');
     }
 }
 

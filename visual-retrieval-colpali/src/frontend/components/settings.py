@@ -22,7 +22,7 @@ def TabButtons(active_tab: str, username: str = None):
             TabButton("Demo questions", "demo-questions", active_tab),
             TabButton("Ranker", "ranker", active_tab),
             TabButton("Connection", "connection", active_tab),
-            # TabButton("Application package", "application-package", active_tab),
+            TabButton("Application package", "application-package", active_tab),
             TabButton("Prompt", "prompt", active_tab) if username == "admin" else None,
             cls="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-[10px]",
         ),
@@ -52,8 +52,8 @@ def _get_tab_content(active_tab: str, settings: UserSettings = None, username: s
         return RankerSettings(ranker=settings.ranker if settings else None)
     elif active_tab == "connection":
         return ConnectionSettings(settings=settings)
-    # elif active_tab == "application-package":
-    #     return "Application package settings coming soon..."
+    elif active_tab == "application-package":
+        return ApplicationPackageSettings(settings=settings)
     elif active_tab == "prompt" and username == "admin":
         return PromptSettings(settings=settings)
     return ""
@@ -239,22 +239,37 @@ def ConnectionSettings(settings: UserSettings = None):
                         H2("Tokens", cls="text-lg font-semibold mb-4"),
                         Div(
                             Label(
-                                "Vespa.ai token ",
+                                "Vespa.ai token ID ",
                                 Span("*", cls="text-red-500"),
-                                htmlFor="vespa-token",
+                                htmlFor="vespa-token-id",
                                 cls="text-sm font-medium"
                             ),
                             Input(
-                                value=settings.vespa_token if settings else '',
+                                value=settings.vespa_token_id if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_token",
+                                name="vespa_token_id",
                                 required=True
                             ),
                             cls="space-y-2 mb-4"
                         ),
                         Div(
                             Label(
-                                "Gemini token ",
+                                "Vespa.ai token value ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="vespa-token-value",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.vespa_token_value if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="vespa_token_value",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "Gemini API token ",
                                 Span("*", cls="text-red-500"),
                                 htmlFor="gemini-token",
                                 cls="text-sm font-medium"
@@ -311,6 +326,84 @@ def ConnectionSettings(settings: UserSettings = None):
             cls="space-y-4",
             **{
                 "hx-post": "/api/settings/connection",
+                "hx-trigger": "submit"
+            }
+        ),
+        cls="space-y-4"
+    )
+
+def ApplicationPackageSettings(settings: UserSettings = None):
+    return Div(
+        Div(
+            H2("Application package settings", cls="text-xl font-semibold px-4 mb-4"),
+            cls="border-b border-gray-200 dark:border-gray-700 -mx-4 mb-6"
+        ),
+        Form(
+            Div(
+                Div(
+                    Div(
+                        Div(
+                            Label(
+                                "Tenant name ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="tenant-name",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.tenant_name if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="tenant_name",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "Application name ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="app-name",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.app_name if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="app_name",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        cls="mb-8"
+                    ),
+                    cls="max-w-[50%]"
+                ),
+                cls="w-full"
+            ),
+            Div(
+                Div(
+                    P(
+                        "Unsaved changes",
+                        cls="text-red-500 text-sm hidden text-right mt-6",
+                        id="application-package-unsaved-changes"
+                    ),
+                    cls="flex-grow self-center"
+                ),
+                Button(
+                    "Next",
+                    cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
+                    id="save-application-package-disabled",
+                    disabled=True,
+                ),
+                Button(
+                    "Next",
+                    cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
+                    id="save-application-package",
+                    type="submit"
+                ),
+                cls="flex items-center w-full gap-4"
+            ),
+            cls="space-y-4",
+            **{
+                "hx-post": "/api/settings/application-package",
                 "hx-trigger": "submit"
             }
         ),
