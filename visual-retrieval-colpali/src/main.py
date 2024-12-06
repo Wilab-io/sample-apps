@@ -659,7 +659,11 @@ async def update_application_package_settings(request):
 
     await request.app.db.update_settings(user_id, settings)
 
-    return Redirect("/settings?tab=prompt")
+
+    if request.session["username"] != "admin":
+        return Redirect("/settings?tab=application-package")
+    else:
+        return Redirect("/settings?tab=prompt")
 
 @rt("/api/settings/prompt", methods=["POST"])
 @login_required

@@ -53,7 +53,7 @@ def _get_tab_content(active_tab: str, settings: UserSettings = None, username: s
     elif active_tab == "connection":
         return ConnectionSettings(settings=settings)
     elif active_tab == "application-package":
-        return ApplicationPackageSettings(settings=settings)
+        return ApplicationPackageSettings(settings=settings, username=username)
     elif active_tab == "prompt" and username == "admin":
         return PromptSettings(settings=settings)
     return ""
@@ -332,7 +332,7 @@ def ConnectionSettings(settings: UserSettings = None):
         cls="space-y-4"
     )
 
-def ApplicationPackageSettings(settings: UserSettings = None):
+def ApplicationPackageSettings(settings: UserSettings = None, username: str = None):
     return Div(
         Div(
             H2("Application package settings", cls="text-xl font-semibold px-4 mb-4"),
@@ -388,13 +388,13 @@ def ApplicationPackageSettings(settings: UserSettings = None):
                     cls="flex-grow self-center"
                 ),
                 Button(
-                    "Next",
+                    "Save" if username != "admin" else "Next", # admin user has one more tab after this one
                     cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
                     id="save-application-package-disabled",
                     disabled=True,
                 ),
                 Button(
-                    "Next",
+                    "Save" if username != "admin" else "Next", # admin user has one more tab after this one
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
                     id="save-application-package",
                     type="submit"
