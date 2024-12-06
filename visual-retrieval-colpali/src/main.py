@@ -48,7 +48,7 @@ from frontend.app import (
 from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
-from backend.init_db import init_admin_user
+from backend.init_db import init_default_users
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
 
@@ -153,7 +153,7 @@ async def keepalive():
 @app.on_event("startup")
 async def startup_event():
     try:
-        await init_admin_user(logger)
+        await init_default_users(logger)
     except SystemExit:
         logger.error("Application Startup Failed")
         raise RuntimeError("Failed to initialize application")
@@ -475,6 +475,7 @@ async def login(request, username: str, password: str):
                 return Login(error_message="Invalid password")
 
             request.session["user_id"] = str(user.user_id)
+            request.session["username"] = user.username
             logger.debug("Successful login for user: %s", username)
 
             return Redirect("/")
@@ -501,6 +502,7 @@ async def get_my_documents(request):
 async def logout(request):
     if "user_id" in request.session:
         del request.session["user_id"]
+        del request.session["username"]
     return Redirect("/login")
 
 STORAGE_DIR = Path("storage/user_documents")
@@ -555,13 +557,21 @@ async def delete_document(request, document_id: str):
 async def get(request):
     user_id = request.session["user_id"]
     tab = request.query_params.get("tab", "demo-questions")
+
+    if "username" not in request.session:
+        user = await request.app.db.get_user_by_id(user_id)
+        request.session["username"] = user.username if user else None
+
+    if request.session["username"] != "admin" and tab == "prompt":
+        tab = "demo-questions"
+
     settings = await request.app.db.get_user_settings(user_id)
 
     return await Layout(
         Settings(
             active_tab=tab,
-            questions=settings.demo_questions,
-            ranker=settings.ranker
+            settings=settings,
+            username=request.session["username"]
         ),
         request=request
     )
@@ -571,12 +581,20 @@ async def get(request):
 async def get_settings_content(request):
     user_id = request.session["user_id"]
     tab = request.query_params.get("tab", "demo-questions")
+
+    if "username" not in request.session:
+        user = await request.app.db.get_user_by_id(user_id)
+        request.session["username"] = user.username if user else None
+
+    if request.session["username"] != "admin" and tab == "prompt":
+        tab = "demo-questions"
+
     settings = await request.app.db.get_user_settings(user_id)
 
     return TabContent(
         tab,
-        questions=settings.demo_questions,
-        ranker=settings.ranker if tab == "ranker" else None
+        settings,
+        username=request.session["username"]
     )
 
 @rt("/api/settings/demo-questions", methods=["POST"])
@@ -607,6 +625,53 @@ async def update_ranker(request):
     await request.app.db.update_user_ranker(user_id, ranker)
 
     return Redirect("/settings?tab=connection")
+
+@rt("/api/settings/connection", methods=["POST"])
+@login_required
+async def update_connection_settings(request):
+    user_id = request.session["user_id"]
+    form = await request.form()
+
+    settings = {
+        'vespa_host': form.get('vespa_host'),
+        'vespa_port': int(form.get('vespa_port')) if form.get('vespa_port') else None,
+        'vespa_token': form.get('vespa_token'),
+        'gemini_token': form.get('gemini_token'),
+        'vespa_cloud_endpoint': form.get('vespa_cloud_endpoint')
+    }
+
+    await request.app.db.update_connection_settings(user_id, settings)
+
+    return Redirect("/settings?tab=prompt")
+
+@rt("/api/settings/prompt", methods=["POST"])
+@login_required
+async def update_prompt_settings(request):
+    if request.session["username"] != "admin":
+        return Redirect("/settings?tab=demo-questions")
+
+    form = await request.form()
+    prompt = form.get('prompt')
+    await request.app.db.update_prompt_settings(request.session["user_id"], prompt)
+
+    return Redirect("/settings?tab=prompt")
+
+@rt("/login", methods=["POST"])
+async def login(request):
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+
+    user = await app.db.fetch_one(
+        select(User).where(User.username == username)
+    )
+
+    if user and verify_password(password, user["password_hash"]):
+        request.session["user_id"] = str(user["user_id"])
+        request.session["username"] = username
+        return Redirect("/")
+
+    return Redirect("/login?error=invalid")
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

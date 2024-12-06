@@ -10,6 +10,25 @@ document.addEventListener('htmx:afterSwap', function(event) {
 function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
+    const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
+    const promptTextarea = document.querySelector('textarea[name="prompt"]');
+
+    // Initialize prompt textarea if it exists
+    if (promptTextarea) {
+        promptTextarea.setAttribute('data-original', promptTextarea.value);
+        promptTextarea.addEventListener('input', updatePromptSaveButtonState);
+        updatePromptSaveButtonState();
+    }
+
+    // Store original values when page loads
+    connectionInputs.forEach(input => {
+        input.setAttribute('data-original', input.value);
+        input.addEventListener('input', updateConnectionSaveButtonState);
+    });
+
+    if (connectionInputs.length > 0) {
+        updateConnectionSaveButtonState();
+    }
 
     if (questionsContainer) {
         questionsContainer.addEventListener('input', function(e) {
@@ -131,6 +150,91 @@ document.addEventListener('htmx:afterSwap', function(event) {
                     updateSaveButtonState();
                 }
             });
+        }
+    }
+});
+
+function updateConnectionSaveButtonState() {
+    const vespaHost = document.querySelector('input[name="vespa_host"]');
+    const vespaPort = document.querySelector('input[name="vespa_port"]');
+    const vespaToken = document.querySelector('input[name="vespa_token"]');
+    const geminiToken = document.querySelector('input[name="gemini_token"]');
+    const vespaCloudEndpoint = document.querySelector('input[name="vespa_cloud_endpoint"]');
+
+    const enabledButton = document.querySelector('#save-connection');
+    const disabledButton = document.querySelector('#save-connection-disabled');
+    const unsavedChanges = document.getElementById('connection-unsaved-changes');
+
+    if (!vespaHost || !vespaPort || !vespaToken || !geminiToken) return;
+
+    const isValid = vespaHost.value.trim() !== '' &&
+                   vespaPort.value.trim() !== '' &&
+                   vespaToken.value.trim() !== '' &&
+                   geminiToken.value.trim() !== '';
+
+    // Check if any field has changed from its original value
+    const hasChanges = [vespaHost, vespaPort, vespaToken, geminiToken, vespaCloudEndpoint].some(input => {
+        const originalValue = input.getAttribute('data-original') || '';
+        return input.value.trim() !== originalValue.trim();
+    });
+
+    if (isValid) {
+        enabledButton.classList.remove('hidden');
+        disabledButton.classList.add('hidden');
+
+        if (hasChanges) {
+            unsavedChanges.classList.remove('hidden');
+        } else {
+            unsavedChanges.classList.add('hidden');
+        }
+    } else {
+        enabledButton.classList.add('hidden');
+        disabledButton.classList.remove('hidden');
+        unsavedChanges.classList.add('hidden');
+    }
+}
+
+function updatePromptSaveButtonState() {
+    const promptTextarea = document.querySelector('textarea[name="prompt"]');
+    const enabledButton = promptTextarea?.closest('form')?.querySelector('button[type="submit"]');
+    const unsavedChanges = document.getElementById('prompt-unsaved-changes');
+
+    if (!promptTextarea || !enabledButton || !unsavedChanges) return;
+
+    // Check if the prompt has changed from its original value
+    const originalValue = promptTextarea.getAttribute('data-original') || '';
+    const hasChanges = promptTextarea.value.trim() !== originalValue.trim();
+    const isEmpty = promptTextarea.value.trim() === '';
+
+    // Disable button if empty, enable if not empty
+    enabledButton.disabled = isEmpty;
+    enabledButton.classList.toggle('opacity-50', isEmpty);
+    enabledButton.classList.toggle('cursor-not-allowed', isEmpty);
+
+    // Only show unsaved changes if there are changes and the prompt is not empty
+    if (hasChanges && !isEmpty) {
+        unsavedChanges.classList.remove('hidden');
+    } else {
+        unsavedChanges.classList.add('hidden');
+    }
+}
+
+// Add event listener for HTMX after request
+document.addEventListener('htmx:afterRequest', function(event) {
+    // Check if it's the prompt form and the request was successful
+    if (event.detail.elt.closest('form')?.matches('form[hx-post="/api/settings/prompt"]') &&
+        event.detail.successful) {
+
+        // Update the data-original attribute with the new value
+        const promptTextarea = document.querySelector('textarea[name="prompt"]');
+        if (promptTextarea) {
+            promptTextarea.setAttribute('data-original', promptTextarea.value);
+        }
+
+        // Hide the unsaved changes message
+        const unsavedChanges = document.getElementById('prompt-unsaved-changes');
+        if (unsavedChanges) {
+            unsavedChanges.classList.add('hidden');
         }
     }
 });

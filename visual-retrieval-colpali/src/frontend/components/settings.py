@@ -1,5 +1,6 @@
-from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form
+from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea
 from lucide_fasthtml import Lucide
+from backend.models import UserSettings
 
 def TabButton(text: str, value: str, active_tab: str):
     is_active = value == active_tab
@@ -15,13 +16,14 @@ def TabButton(text: str, value: str, active_tab: str):
         """
     )
 
-def TabButtons(active_tab: str):
+def TabButtons(active_tab: str, username: str = None):
     return Div(
         Div(
             TabButton("Demo questions", "demo-questions", active_tab),
             TabButton("Ranker", "ranker", active_tab),
             TabButton("Connection", "connection", active_tab),
-            TabButton("Application package", "application-package", active_tab),
+            # TabButton("Application package", "application-package", active_tab),
+            TabButton("Prompt", "prompt", active_tab) if username == "admin" else None,
             cls="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-[10px]",
         ),
         Button(
@@ -33,25 +35,27 @@ def TabButtons(active_tab: str):
         id="tab-buttons"
     )
 
-def TabContent(active_tab: str, questions: list[str] = None, ranker: str = None):
+def TabContent(active_tab: str, settings: UserSettings = None, username: str = None):
     return Div(
-        TabButtons(active_tab),
+        TabButtons(active_tab, username),
         Div(
-            _get_tab_content(active_tab, questions, ranker),
+            _get_tab_content(active_tab, settings, username),
             cls="bg-white dark:bg-gray-900 p-4 rounded-[10px] shadow-md w-full border border-gray-200 dark:border-gray-700",
         ),
         id="settings-content"
     )
 
-def _get_tab_content(active_tab: str, questions: list[str] = None, ranker: str = None):
+def _get_tab_content(active_tab: str, settings: UserSettings = None, username: str = None):
     if active_tab == "demo-questions":
-        return DemoQuestions(questions or [])
+        return DemoQuestions(questions=settings.demo_questions if settings else [])
     elif active_tab == "ranker":
-        return RankerSettings(ranker=ranker)
+        return RankerSettings(ranker=settings.ranker if settings else None)
     elif active_tab == "connection":
-        return "Connection settings coming soon..."
-    elif active_tab == "application-package":
-        return "Application package settings coming soon..."
+        return ConnectionSettings(settings=settings)
+    # elif active_tab == "application-package":
+    #     return "Application package settings coming soon..."
+    elif active_tab == "prompt" and username == "admin":
+        return PromptSettings(settings=settings)
     return ""
 
 def DemoQuestions(questions: list[str]):
@@ -186,11 +190,182 @@ def RankerSettings(ranker: str = "colpali"):
         cls="space-y-4"
     )
 
-def Settings(active_tab: str = "demo-questions", questions: list[str] = None, ranker: str = None):
+def ConnectionSettings(settings: UserSettings = None):
+    return Div(
+        Div(
+            H2("Connection settings", cls="text-xl font-semibold px-4 mb-4"),
+            cls="border-b border-gray-200 dark:border-gray-700 -mx-4 mb-6"
+        ),
+        Form(
+            Div(
+                # Content wrapper with max-width to limit input width
+                Div(
+                    Div(
+                        H2("Vespa.ai endpoint connection", cls="text-lg font-semibold mb-4"),
+                        Div(
+                            Label(
+                                "Vespa.ai host ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="vespa-host",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.vespa_host if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="vespa_host",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "Vespa.ai port ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="vespa-port",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.vespa_port if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="vespa_port",
+                                type="number",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        cls="mb-8"
+                    ),
+                    Div(
+                        H2("Tokens", cls="text-lg font-semibold mb-4"),
+                        Div(
+                            Label(
+                                "Vespa.ai token ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="vespa-token",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.vespa_token if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="vespa_token",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "Gemini token ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="gemini-token",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.gemini_token if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="gemini_token",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        cls="mb-8"
+                    ),
+                    Div(
+                        H2("Vespa Cloud endpoint", cls="text-lg font-semibold mb-4"),
+                        Div(
+                            Label("Endpoint URL", htmlFor="vespa-cloud-endpoint", cls="text-sm font-medium"),
+                            Input(
+                                value=settings.vespa_cloud_endpoint if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="vespa_cloud_endpoint"
+                            ),
+                            cls="space-y-2"
+                        ),
+                    ),
+                    cls="max-w-[50%]"
+                ),
+                cls="w-full"
+            ),
+            Div(
+                Div(
+                    P(
+                        "Unsaved changes",
+                        cls="text-red-500 text-sm hidden text-right mt-6",
+                        id="connection-unsaved-changes"
+                    ),
+                    cls="flex-grow self-center"
+                ),
+                Button(
+                    "Next",
+                    cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
+                    id="save-connection-disabled",
+                    disabled=True,
+                ),
+                Button(
+                    "Next",
+                    cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
+                    id="save-connection",
+                    type="submit"
+                ),
+                cls="flex items-center w-full gap-4"
+            ),
+            cls="space-y-4",
+            **{
+                "hx-post": "/api/settings/connection",
+                "hx-trigger": "submit"
+            }
+        ),
+        cls="space-y-4"
+    )
+
+def PromptSettings(settings: UserSettings = None):
+    return Div(
+        Div(
+            H2("Custom prompt setting", cls="text-xl font-semibold px-4 mb-4"),
+            cls="border-b border-gray-200 dark:border-gray-700 -mx-4 mb-6"
+        ),
+        Form(
+            Div(
+                Label("Custom prompt", htmlFor="prompt", cls="text-lg font-semibold"),
+                Textarea(
+                    settings.prompt if settings else '',
+                    cls="flex-1 w-full h-[400px] rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background mt-4",
+                    name="prompt",
+                    id="prompt",
+                    **{"data-original": settings.prompt if settings else ''}
+                ),
+                cls="space-y-2"
+            ),
+            Div(
+                Div(
+                    P(
+                        "Unsaved changes",
+                        cls="text-red-500 text-sm hidden text-right mt-6",
+                        id="prompt-unsaved-changes"
+                    ),
+                    cls="flex-grow self-center"
+                ),
+                Button(
+                    "Save",
+                    cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] enabled:hover:opacity-80",
+                    type="submit"
+                ),
+                cls="flex items-center w-full gap-4"
+            ),
+            cls="space-y-4",
+            **{
+                "hx-post": "/api/settings/prompt",
+                "hx-trigger": "submit",
+                "hx-swap": "none"
+            }
+        ),
+        cls="space-y-4"
+    )
+
+def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, username: str = None):
     return Main(
         H1("Settings", cls="text-4xl font-bold mb-8 text-center"),
         Div(
-            TabContent(active_tab, questions, ranker),
+            TabContent(active_tab, settings, username),
             cls="w-full max-w-screen-xl mx-auto"
         ),
         cls="container mx-auto px-4 py-8 w-full min-h-0"
