@@ -149,12 +149,8 @@ class Database:
 
     async def get_demo_questions(self, user_id: str) -> list[str]:
         """Get demo questions for a user"""
-        async with self.get_session() as session:
-            result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == UUID(user_id))
-            )
-            settings = result.scalar_one_or_none()
-            return settings.demo_questions if settings else []
+        settings = await self.get_user_settings(user_id)
+        return settings.demo_questions if settings else []
 
     async def get_user_settings(self, user_id: str) -> UserSettings:
         """Get user settings, creating default settings if they don't exist"""
