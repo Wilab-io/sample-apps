@@ -39,7 +39,8 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
             id="deploy-button",
             **{
                 "hx-post": "/api/deploy",
-                "hx-trigger": "click"
+                "hx-trigger": "click",
+                "hx-swap": "none"
             }
         ),
         cls="flex justify-between items-center mb-8 gap-4",
