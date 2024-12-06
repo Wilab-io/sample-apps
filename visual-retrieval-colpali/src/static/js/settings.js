@@ -10,6 +10,7 @@ document.addEventListener('htmx:afterSwap', function(event) {
 function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
+    const rankerInputs = document.querySelectorAll('input[name="ranker"]');
     const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
     const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
@@ -19,6 +20,17 @@ function initializeSettingsPage() {
         promptTextarea.setAttribute('data-original', promptTextarea.value);
         promptTextarea.addEventListener('input', updatePromptSaveButtonState);
         updatePromptSaveButtonState();
+    }
+
+    if (rankerInputs.length > 0) {
+        const checkedInput = document.querySelector('input[name="ranker"]:checked');
+        if (checkedInput) {
+            rankerInputs.forEach(input => {
+                input.setAttribute('data-original', checkedInput.value);
+                input.addEventListener('change', updateRankerSaveButtonState);
+            });
+        }
+        updateRankerSaveButtonState();
     }
 
     // Store original values when page loads
@@ -163,6 +175,22 @@ document.addEventListener('htmx:afterSwap', function(event) {
         }
     }
 });
+
+function updateRankerSaveButtonState() {
+    const checkedInput = document.querySelector('input[name="ranker"]:checked');
+    const unsavedChanges = document.getElementById('ranker-unsaved-changes');
+
+    if (!checkedInput || !unsavedChanges) return;
+
+    const originalValue = checkedInput.getAttribute('data-original') || '';
+    const hasChanges = checkedInput.value !== originalValue;
+
+    if (hasChanges) {
+        unsavedChanges.classList.remove('hidden');
+    } else {
+        unsavedChanges.classList.add('hidden');
+    }
+}
 
 function updateConnectionSaveButtonState() {
     const vespaHost = document.querySelector('input[name="vespa_host"]');

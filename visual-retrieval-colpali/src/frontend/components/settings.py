@@ -142,7 +142,8 @@ def RankerSettings(ranker: str = "colpali"):
                         name="ranker",
                         value="colpali",
                         checked=ranker == "colpali",
-                        cls="mr-2"
+                        cls="mr-2",
+                        **{"data-original": ranker}
                     ),
                     "ColPali",
                     cls="flex items-center space-x-2"
@@ -174,13 +175,21 @@ def RankerSettings(ranker: str = "colpali"):
                 cls="space-y-2 mb-8"
             ),
             Div(
+                Div(
+                    P(
+                        "Unsaved changes",
+                        cls="text-red-500 text-sm hidden text-right mt-6",
+                        id="ranker-unsaved-changes"
+                    ),
+                    cls="flex-grow self-center"
+                ),
                 Button(
                     "Next",
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
                     id="save-ranker",
                     type="submit"
                 ),
-                cls="flex justify-end w-full"
+                cls="flex items-center w-full gap-4"
             ),
             **{
                 "hx-post": "/api/settings/ranker",
