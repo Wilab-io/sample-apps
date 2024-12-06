@@ -30,18 +30,17 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
         ),
         Button(
             "Deploy",
-            cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]",
-            id="deploy-button",
-            disabled=not appConfigured,
-        ) if not appConfigured else Button(
-            "Deploy",
             cls="bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
             id="deploy-button",
             **{
                 "hx-post": "/api/deploy",
-                "hx-trigger": "click",
                 "hx-swap": "none"
             }
+        ) if appConfigured else Button(
+            "Deploy",
+            cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]",
+            id="deploy-button",
+            disabled=not appConfigured,
         ),
         cls="flex justify-between items-center mb-8 gap-4",
         id="tab-buttons"

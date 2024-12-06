@@ -51,6 +51,7 @@ from backend.middleware import login_required
 from backend.init_db import init_default_users
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
+from backend.deploy import deploy_application
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -703,10 +704,25 @@ async def login(request):
 
 @app.post("/api/deploy")
 @login_required
-async def deploy_application(request):
+async def deploy(request):
     """Initiate application deployment"""
     logger.info("APP DEPLOY INITIALIZED")
-    return {"status": "success"}
+
+    try:
+        user_id = request.session["user_id"]
+        settings = await request.app.db.get_user_settings(user_id)
+        if not settings:
+            logger.error("Settings not found")
+            return {"status": "error", "message": "Settings not found"}
+
+        # Call the deploy function
+        async for log_message in deploy_application(settings, user_id):
+            logger.info(log_message.strip())
+
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Deployment error: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
