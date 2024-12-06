@@ -566,12 +566,16 @@ async def get(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    app_configured = await request.app.db.is_application_configured(user_id)
+
+    logger.debug(f"Application configuration check: {app_configured}")
 
     return await Layout(
         Settings(
             active_tab=tab,
             settings=settings,
-            username=request.session["username"]
+            username=request.session["username"],
+            appConfigured=app_configured,
         ),
         request=request
     )
@@ -590,11 +594,14 @@ async def get_settings_content(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    app_configured = await request.app.db.is_application_configured(user_id)
 
+    logger.debug(f"Application configuration check: {app_configured}")
     return TabContent(
         tab,
         settings,
-        username=request.session["username"]
+        username=request.session["username"],
+        appConfigured=app_configured
     )
 
 @rt("/api/settings/demo-questions", methods=["POST"])
@@ -693,6 +700,13 @@ async def login(request):
         return Redirect("/")
 
     return Redirect("/login?error=invalid")
+
+@app.post("/api/deploy")
+@login_required
+async def deploy_application(request):
+    """Initiate application deployment"""
+    logger.info("APP DEPLOY INITIALIZED")
+    return {"status": "success"}
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

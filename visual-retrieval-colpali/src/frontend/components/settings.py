@@ -16,7 +16,9 @@ def TabButton(text: str, value: str, active_tab: str):
         """
     )
 
-def TabButtons(active_tab: str, username: str = None):
+def TabButtons(active_tab: str, username: str = None, appConfigured: bool = False):
+    print(f"appConfigured: {appConfigured}")
+
     return Div(
         Div(
             TabButton("Demo questions", "demo-questions", active_tab),
@@ -28,16 +30,25 @@ def TabButtons(active_tab: str, username: str = None):
         ),
         Button(
             "Deploy",
-            disabled=True,
-            cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]"
+            cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]",
+            id="deploy-button",
+            disabled=not appConfigured,
+        ) if not appConfigured else Button(
+            "Deploy",
+            cls="bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
+            id="deploy-button",
+            **{
+                "hx-post": "/api/deploy",
+                "hx-trigger": "click"
+            }
         ),
         cls="flex justify-between items-center mb-8 gap-4",
         id="tab-buttons"
     )
 
-def TabContent(active_tab: str, settings: UserSettings = None, username: str = None):
+def TabContent(active_tab: str, settings: UserSettings = None, username: str = None, appConfigured: bool = False):
     return Div(
-        TabButtons(active_tab, username),
+        TabButtons(active_tab, username, appConfigured),
         Div(
             _get_tab_content(active_tab, settings, username),
             cls="bg-white dark:bg-gray-900 p-4 rounded-[10px] shadow-md w-full border border-gray-200 dark:border-gray-700",
@@ -463,11 +474,11 @@ def PromptSettings(settings: UserSettings = None):
         cls="space-y-4"
     )
 
-def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, username: str = None):
+def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, username: str = None, appConfigured: bool = False):
     return Main(
         H1("Settings", cls="text-4xl font-bold mb-8 text-center"),
         Div(
-            TabContent(active_tab, settings, username),
+            TabContent(active_tab, settings, username, appConfigured),
             cls="w-full max-w-screen-xl mx-auto"
         ),
         cls="container mx-auto px-4 py-8 w-full min-h-0"

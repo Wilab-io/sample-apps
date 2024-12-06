@@ -227,3 +227,26 @@ If there are no relevant visual elements, provide an empty string for the visual
 Here is the document image to analyze:
 Generate the queries based on this image and provide the response in the specified JSON format.
 Only return JSON. Don't return any extra explanation text."""
+
+    async def is_application_configured(self, user_id: str) -> bool:
+        documents = await self.get_user_documents(UUID(user_id))
+        has_documents = len(documents) > 0
+
+        settings = await self.get_user_settings(user_id)
+        if not settings:
+            return False
+
+        required_settings = [
+            settings.vespa_host,
+            settings.vespa_port,
+            settings.vespa_token_id,
+            settings.vespa_token_value,
+            settings.gemini_token,
+            settings.tenant_name,
+            settings.app_name,
+            settings.prompt
+        ]
+
+        has_required_settings = all(setting is not None for setting in required_settings)
+
+        return has_documents and has_required_settings
