@@ -1,4 +1,4 @@
-from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea
+from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea, Link
 from lucide_fasthtml import Lucide
 from backend.models import UserSettings
 
@@ -369,6 +369,10 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 htmlFor="tenant-name",
                                 cls="text-sm font-medium"
                             ),
+                            P(
+                                "Create a tenant from vespa.ai/free-trial the trial includes $300 credit",
+                                cls="text-sm text-gray-500 mb-2"
+                            ),
                             Input(
                                 value=settings.tenant_name if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
@@ -388,7 +392,9 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 value=settings.app_name if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="app_name",
-                                required=True
+                                required=True,
+                                pattern="[a-zA-Z0-9]+",
+                                title="Only letters and numbers allowed, no spaces or special characters"
                             ),
                             cls="space-y-2 mb-4"
                         ),
