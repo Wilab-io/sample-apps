@@ -80,6 +80,14 @@ class Database:
             logger.debug(f"Database: Found {len(documents)} documents")
             return documents
 
+    async def get_user_document_by_id(self, document_id: str):
+        """Get a document by ID"""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(UserDocument).where(UserDocument.document_id == document_id)
+            )
+            return result.scalar_one_or_none()
+
     async def add_user_document(self, user_id: str, document_name: str, file_content: bytes):
         """Add a new document to both filesystem and database"""
         logger = logging.getLogger("vespa_app")
