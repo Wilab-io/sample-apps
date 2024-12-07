@@ -206,7 +206,7 @@ async def Layout(*c, is_home=False, request=None, **kwargs):
         Body(
             Header(
                 A(Logo(), href="/"),
-                await Links(request=request),  # Await the async Links function
+                await Links(request=request),
                 cls="min-h-[55px] h-[55px] w-full flex items-center justify-between px-4",
             ),
             *c,

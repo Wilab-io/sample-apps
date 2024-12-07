@@ -35,6 +35,7 @@ from backend.models import User
 
 from backend.colpali import SimMapGenerator
 from backend.vespa_app import VespaQueryClient
+from backend.models import UserSettings
 from frontend.app import (
     AboutThisDemo,
     ChatResult,
@@ -52,6 +53,7 @@ from backend.init_db import init_default_users
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
 from backend.deploy import deploy_application
+from frontend.components.deployment import DeploymentModal, DeploymentSuccessModal, DeploymentErrorModal
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -78,6 +80,7 @@ awesomplete_js = Script(
     src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.7/awesomplete.min.js"
 )
 sselink = Script(src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js")
+deployment_js = Script(src="/static/js/deployment.js")
 
 # Get log level from environment variable, default to INFO
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -110,6 +113,7 @@ app, rt = fast_app(
         sselink,
         ShadHead(tw_cdn=False, theme_handle=True),
         settings_js,
+        deployment_js,
     ),
 )
 thread_pool = ThreadPoolExecutor()
@@ -704,7 +708,7 @@ async def deploy(request):
     """Initiate application deployment"""
     try:
         user_id = request.session["user_id"]
-        settings = await request.app.db.get_user_settings(user_id)
+        settings: UserSettings = await request.app.db.get_user_settings(user_id)
         if not settings:
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
@@ -720,7 +724,7 @@ async def deploy(request):
 
         asyncio.create_task(poll_vespa_keepalive())
 
-        configure_gemini(settings["gemini_token"])
+        configure_gemini(settings.gemini_token)
 
         app.deployed = True
 
@@ -728,6 +732,21 @@ async def deploy(request):
     except Exception as e:
         logger.error(f"Deployment error: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+@rt("/deployment-modal")
+@login_required
+async def get_deployment_modal(request):
+    return DeploymentModal()
+
+@rt("/deployment-modal/success")
+@login_required
+async def get_deployment_success_modal(request):
+    return DeploymentSuccessModal()
+
+@rt("/deployment-modal/error")
+@login_required
+async def get_deployment_error_modal(request):
+    return DeploymentErrorModal()
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

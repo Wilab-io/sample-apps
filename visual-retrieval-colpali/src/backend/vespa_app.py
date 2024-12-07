@@ -58,7 +58,7 @@ class VespaQueryClient:
             self.logger.info("Connected using token")
             self.vespa_app_url = os.environ.get("VESPA_APP_TOKEN_URL")
             if not self.vespa_app_url:
-                self.vespa_app_url = settings.vespa_app_url
+                self.vespa_app_url = settings.vespa_cloud_endpoint
                 if not self.vespa_app_url:
                     raise ValueError("Please set the VESPA_APP_TOKEN_URL environment variable or setting")
 
