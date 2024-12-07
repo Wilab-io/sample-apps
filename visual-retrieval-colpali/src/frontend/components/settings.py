@@ -388,13 +388,17 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 htmlFor="app-name",
                                 cls="text-sm font-medium"
                             ),
+                            P(
+                                "Only lowercase letters and numbers allowed, no spaces or special characters, start with a letter",
+                                cls="text-sm text-gray-500 mb-2"
+                            ),
                             Input(
                                 value=settings.app_name if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="app_name",
                                 required=True,
-                                pattern="[a-zA-Z0-9]+",
-                                title="Only letters and numbers allowed, no spaces or special characters"
+                                pattern="[a-z0-9]+",
+                                title="Only lowercase letters and numbers allowed, no spaces or special characters, start with a letter"
                             ),
                             cls="space-y-2 mb-4"
                         ),
