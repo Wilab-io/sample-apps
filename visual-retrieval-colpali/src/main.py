@@ -112,21 +112,23 @@ app, rt = fast_app(
         settings_js,
     ),
 )
-vespa_app: Vespa = VespaQueryClient(logger=logger)
 thread_pool = ThreadPoolExecutor()
+app.deployed = False
 # Gemini config
+def configure_gemini(api_key: str):
+    genai.configure(api_key=api_key)
+    GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images.
+    If the user query can not be interpreted as a question, or if the answer to the query can not be inferred from the images,
+    answer with the exact phrase "I am sorry, I can't find enough relevant information on these pages to answer your question.".
+    Your response should be HTML formatted, but only simple tags, such as <b>. <p>, <i>, <br> <ul> and <li> are allowed. No HTML tables.
+    This means that newlines will be replaced with <br> tags, bold text will be enclosed in <b> tags, and so on.
+    Do NOT include backticks (`) in your response. Only simple HTML tags and text.
+    """
+    app.gemini_model = genai.GenerativeModel(
+        "gemini-1.5-flash-8b", system_instruction=GEMINI_SYSTEM_PROMPT
+    )
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images.
-If the user query can not be interpreted as a question, or if the answer to the query can not be inferred from the images,
-answer with the exact phrase "I am sorry, I can't find enough relevant information on these pages to answer your question.".
-Your response should be HTML formatted, but only simple tags, such as <b>. <p>, <i>, <br> <ul> and <li> are allowed. No HTML tables.
-This means that newlines will be replaced with <br> tags, bold text will be enclosed in <b> tags, and so on.
-Do NOT include backticks (`) in your response. Only simple HTML tags and text.
-"""
-gemini_model = genai.GenerativeModel(
-    "gemini-1.5-flash-8b", system_instruction=GEMINI_SYSTEM_PROMPT
-)
+
 STATIC_DIR = Path("static")
 IMG_DIR = STATIC_DIR / "full_images"
 SIM_MAP_DIR = STATIC_DIR / "sim_maps"
@@ -142,12 +144,6 @@ def shutdown_db():
 @app.on_event("startup")
 def load_model_on_startup():
     app.sim_map_generator = SimMapGenerator(logger=logger)
-    return
-
-
-@app.on_event("startup")
-async def keepalive():
-    asyncio.create_task(poll_vespa_keepalive())
     return
 
 
@@ -239,7 +235,7 @@ async def get(session, request, query: str, ranking: str):
 
     start = time.perf_counter()
     # Fetch real search results from Vespa
-    result = await vespa_app.get_result_from_query(
+    result = await app.vespa_app.get_result_from_query(
         query=query,
         q_embs=q_embs,
         ranking=ranking,
@@ -253,7 +249,7 @@ async def get(session, request, query: str, ranking: str):
     # Safely get total_count with a default of 0
     total_count = result.get("root", {}).get("fields", {}).get("totalCount", 0)
 
-    search_results = vespa_app.results_to_search_results(result, idx_to_token)
+    search_results = app.vespa_app.results_to_search_results(result, idx_to_token)
 
     get_and_store_sim_maps(
         query_id=query_id,
@@ -278,7 +274,7 @@ def get_results_children(result):
 async def poll_vespa_keepalive():
     while True:
         await asyncio.sleep(5)
-        await vespa_app.keepalive()
+        await app.vespa_app.keepalive()
         logger.debug(f"Vespa keepalive: {time.time()}")
 
 
@@ -287,7 +283,7 @@ def get_and_store_sim_maps(
     query_id, query: str, q_embs, ranking, idx_to_token, doc_ids
 ):
     ranking_sim = ranking + "_sim"
-    vespa_sim_maps = vespa_app.get_sim_maps_from_query(
+    vespa_sim_maps = app.vespa_app.get_sim_maps_from_query(
         query=query,
         q_embs=q_embs,
         ranking=ranking_sim,
@@ -355,7 +351,7 @@ async def full_image(doc_id: str):
     """
     img_path = IMG_DIR / f"{doc_id}.jpg"
     if not os.path.exists(img_path):
-        image_data = await vespa_app.get_full_image_from_vespa(doc_id)
+        image_data = await app.vespa_app.get_full_image_from_vespa(doc_id)
         # image data is base 64 encoded string. Save it to disk as jpg.
         with open(img_path, "wb") as f:
             f.write(base64.b64decode(image_data))
@@ -377,7 +373,7 @@ async def get_suggestions(query: str = ""):
     query = query.lower().strip()
 
     if query:
-        suggestions = await vespa_app.get_suggestions(query)
+        suggestions = await app.vespa_app.get_suggestions(query)
         if len(suggestions) > 0:
             return JSONResponse({"suggestions": suggestions})
 
@@ -423,7 +419,7 @@ async def message_generator(query_id: str, query: str, doc_ids: list):
         return text.replace("\n", "<br>")
 
     response_text = ""
-    async for chunk in await gemini_model.generate_content_async(
+    async for chunk in await app.gemini_model.generate_content_async(
         images + ["\n\n Query: ", query], stream=True
     ):
         if chunk.text:
@@ -447,7 +443,7 @@ async def get_message(query_id: str, query: str, doc_ids: str):
 @login_required
 async def get(request):
     return await Layout(
-        Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")),
+        Main(Div(P(f"Connected to Vespa at {app.vespa_app.url}"), cls="p-4")),
         request=request
     )
 
@@ -706,8 +702,6 @@ async def login(request):
 @login_required
 async def deploy(request):
     """Initiate application deployment"""
-    logger.info("APP DEPLOY INITIALIZED")
-
     try:
         user_id = request.session["user_id"]
         settings = await request.app.db.get_user_settings(user_id)
@@ -715,9 +709,20 @@ async def deploy(request):
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
 
-        # Call the deploy function
-        async for log_message in deploy_application(settings, user_id):
-            logger.info(log_message.strip())
+        model = app.sim_map_generator.model
+        processor = app.sim_map_generator.processor
+        documents = await request.app.db.get_user_documents(user_id)
+        doc_names = {doc.document_id: doc.document_name for doc in documents}
+
+        await deploy_application(request, settings, user_id, model, processor, doc_names)
+
+        app.vespa_app = VespaQueryClient(logger=logger, settings=settings)
+
+        asyncio.create_task(poll_vespa_keepalive())
+
+        configure_gemini(settings["gemini_token"])
+
+        app.deployed = True
 
         return {"status": "success"}
     except Exception as e:
