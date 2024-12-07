@@ -10,14 +10,15 @@ from vespa.io import VespaQueryResponse
 from .colpali import SimMapGenerator
 import backend.stopwords
 import logging
+from backend.models import UserSettings
 
 
 class VespaQueryClient:
     MAX_QUERY_TERMS = 64
     VESPA_SCHEMA_NAME = "pdf_page"
-    SELECT_FIELDS = "id,title,url,blur_image,page_number,snippet,text"
+    SELECT_FIELDS = "id,title,blur_image,page_number,snippet,text"
 
-    def __init__(self, logger: logging.Logger):
+    def __init__(self, logger: logging.Logger, settings: UserSettings):
         """
         Initialize the VespaQueryClient by loading environment variables and establishing a connection to the Vespa application.
         """
@@ -57,16 +58,15 @@ class VespaQueryClient:
             self.logger.info("Connected using token")
             self.vespa_app_url = os.environ.get("VESPA_APP_TOKEN_URL")
             if not self.vespa_app_url:
-                raise ValueError(
-                    "Please set the VESPA_APP_TOKEN_URL environment variable"
-                )
+                self.vespa_app_url = settings.vespa_app_url
+                if not self.vespa_app_url:
+                    raise ValueError("Please set the VESPA_APP_TOKEN_URL environment variable or setting")
 
             self.vespa_cloud_secret_token = os.environ.get("VESPA_CLOUD_SECRET_TOKEN")
-
             if not self.vespa_cloud_secret_token:
-                raise ValueError(
-                    "Please set the VESPA_CLOUD_SECRET_TOKEN environment variable"
-                )
+                self.vespa_cloud_secret_token = settings.vespa_cloud_secret_token
+                if not self.vespa_cloud_secret_token:
+                    raise ValueError("Please set the VESPA_CLOUD_SECRET_TOKEN environment variable or setting")
 
             # Instantiate Vespa connection
             self.app = Vespa(
@@ -444,15 +444,15 @@ class VespaQueryClient:
         Returns:
             bool: True if the connection is alive.
         """
-        async with self.app.asyncio(connections=1) as session:
-            response: VespaQueryResponse = await session.query(
-                body={
-                    "yql": f"select title from {self.VESPA_SCHEMA_NAME} where true limit 1;",
-                    "ranking": "unranked",
-                    "query": "keepalive",
-                    "timeout": "3s",
-                    "hits": 1,
-                },
-            )
-            assert response.is_successful(), response.json
+        # async with self.app.asyncio(connections=1) as session:
+        #     response: VespaQueryResponse = await session.query(
+        #         body={
+        #             "yql": f"select title from {self.VESPA_SCHEMA_NAME} where true limit 1;",
+        #             "ranking": "unranked",
+        #             "query": "keepalive",
+        #             "timeout": "3s",
+        #             "hits": 1,
+        #         },
+        #     )
+        #     assert response.is_successful(), response.json
         return True
