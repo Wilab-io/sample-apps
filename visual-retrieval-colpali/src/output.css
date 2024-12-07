@@ -1886,6 +1886,14 @@ aside {
   opacity: 0.8;
 }
 
+.disabled\:cursor-not-allowed:disabled {
+  cursor: not-allowed;
+}
+
+.disabled\:opacity-50:disabled {
+  opacity: 0.5;
+}
+
 .group:hover .group-hover\:visible {
   visibility: visible;
 }

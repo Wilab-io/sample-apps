@@ -199,9 +199,10 @@ def ShareButtons():
 
 
 class SearchBox:
-    def __init__(self, query_value: str = "", ranking_value: str = ""):
+    def __init__(self, query_value: str = "", ranking_value: str = "", is_deployed: bool = False):
         self.query_value = query_value
         self.ranking_value = ranking_value
+        self.is_deployed = is_deployed
 
     def __ft__(self):
         return Div(
@@ -209,13 +210,14 @@ class SearchBox:
                 Input(
                     type="search",
                     name="query",
-                    placeholder="Search...",
+                    placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
                     value=self.query_value,
-                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background",
+                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
                     autofocus=True,
+                    disabled=not self.is_deployed
                 ),
                 P(
-                    f"Ranking by: {self.ranking_value.title()}",
+                    f"Ranking by: {self.ranking_value.title()}" if self.is_deployed else "",
                     cls="text-sm text-muted-foreground mt-2"
                 ),
                 cls="w-full max-w-2xl mx-auto",
@@ -277,11 +279,12 @@ def Hero():
 async def Home(request=None):
     settings = await request.app.db.get_user_settings(request.session["user_id"])
     ranker = settings.ranker.value if hasattr(settings.ranker, 'value') else settings.ranker
+    is_deployed = getattr(request.app, 'deployed', False)
 
     return Div(
         Div(
             Hero(),
-            SearchBox(ranking_value=ranker),
+            SearchBox(ranking_value=ranker, is_deployed=is_deployed),
             await SampleQueries(request),
             ShareButtons(),
             cls="grid gap-8 content-start mt-[13vh]",
