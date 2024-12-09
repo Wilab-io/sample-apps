@@ -29,7 +29,7 @@ CREATE TABLE user_settings (
     vespa_cloud_endpoint VARCHAR(255),
     tenant_name VARCHAR(255),
     app_name VARCHAR(255),
-    schema VARCHAR(255),
+    schema TEXT,
     prompt TEXT,
     FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );

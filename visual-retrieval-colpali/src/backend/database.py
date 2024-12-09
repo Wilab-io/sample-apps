@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import sessionmaker as sessionMaker
 from sqlalchemy.schema import CreateTable
 from sqlalchemy import select, delete
 from uuid import UUID
@@ -22,7 +22,7 @@ DATABASE_URL = (
 
 # Create async engine
 engine = create_async_engine(DATABASE_URL, echo=False)
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = sessionMaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 STORAGE_DIR = Path("storage/user_documents")
 
@@ -165,6 +165,15 @@ class Database:
         async with self.get_session() as session:
             user_id_uuid = UUID(user_id)
 
+            # First check if user exists
+            user_result = await session.execute(
+                select(User).where(User.user_id == user_id_uuid)
+            )
+            user = user_result.scalar_one_or_none()
+
+            if not user:
+                return None
+
             result = await session.execute(
                 select(UserSettings).where(UserSettings.user_id == user_id_uuid)
             )
@@ -174,7 +183,8 @@ class Database:
                 settings = UserSettings(
                     user_id=user_id_uuid,
                     ranker=RankerType.colpali,
-                    prompt=self.get_default_prompt()
+                    prompt=self.get_default_prompt(),
+                    schema=self.get_default_schema()
                 )
                 session.add(settings)
                 await session.commit()
@@ -202,6 +212,29 @@ class Database:
                 session.add(user_settings)
 
             await session.commit()
+
+    async def is_application_configured(self, user_id: str) -> bool:
+        documents = await self.get_user_documents(UUID(user_id))
+        has_documents = len(documents) > 0
+
+        settings = await self.get_user_settings(user_id)
+        if not settings:
+            return False
+
+        required_settings = [
+            settings.vespa_host,
+            settings.vespa_port,
+            settings.vespa_token_id,
+            settings.vespa_token_value,
+            settings.gemini_token,
+            settings.tenant_name,
+            settings.app_name,
+            settings.prompt
+        ]
+
+        has_required_settings = all(setting is not None for setting in required_settings)
+
+        return has_documents and has_required_settings
 
     @staticmethod
     def get_default_prompt() -> str:
@@ -236,25 +269,415 @@ Here is the document image to analyze:
 Generate the queries based on this image and provide the response in the specified JSON format.
 Only return JSON. Don't return any extra explanation text."""
 
-    async def is_application_configured(self, user_id: str) -> bool:
-        documents = await self.get_user_documents(UUID(user_id))
-        has_documents = len(documents) > 0
+    @staticmethod
+    def get_default_schema() -> str:
+        return """schema pdf_page {
+    document pdf_page {
+        field id type string {
+            indexing: summary | index
+            match {
+                word
+            }
+        }
+        field url type string {
+            indexing: summary | index
+        }
+        field year type int {
+            indexing: summary | attribute
+        }
+        field title type string {
+            indexing: summary | index
+            index: enable-bm25
+            match {
+                text
+            }
+        }
+        field page_number type int {
+            indexing: summary | attribute
+        }
+        field blur_image type raw {
+            indexing: summary
+        }
+        field full_image type raw {
+            indexing: summary
+        }
+        field text type string {
+            indexing: summary | index
+            index: enable-bm25
+            match {
+                text
+            }
+        }
+        field embedding type tensor<int8>(patch{}, v[16]) {
+            indexing: attribute | index
+            attribute {
+                distance-metric: hamming
+            }
+            index {
+                hnsw {
+                    max-links-per-node: 32
+                    neighbors-to-explore-at-insert: 400
+                }
+            }
+        }
+        field questions type array<string> {
+            indexing: summary | attribute
+            summary: matched-elements-only
+        }
+        field queries type array<string> {
+            indexing: summary | attribute
+            summary: matched-elements-only
+        }
+    }
+    fieldset default {
+        fields: title, text
+    }
+    rank-profile bm25 {
+        inputs {
+            query(qt) tensor<float>(querytoken{}, v[128])
 
-        settings = await self.get_user_settings(user_id)
-        if not settings:
-            return False
+        }
+        function similarities() {
+            expression {
 
-        required_settings = [
-            settings.vespa_host,
-            settings.vespa_port,
-            settings.vespa_token_id,
-            settings.vespa_token_value,
-            settings.gemini_token,
-            settings.tenant_name,
-            settings.app_name,
-            settings.prompt
-        ]
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
 
-        has_required_settings = all(setting is not None for setting in required_settings)
+            }
+        }
+        function normalized() {
+            expression {
 
-        return has_documents and has_required_settings
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        first-phase {
+            expression {
+                bm25(title) + bm25(text)
+            }
+        }
+    }
+    rank-profile bm25_sim inherits bm25 {
+        first-phase {
+            expression {
+                bm25(title) + bm25(text)
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    rank-profile colpali {
+        inputs {
+            query(rq0) tensor<int8>(v[16])
+            query(rq1) tensor<int8>(v[16])
+            query(rq2) tensor<int8>(v[16])
+            query(rq3) tensor<int8>(v[16])
+            query(rq4) tensor<int8>(v[16])
+            query(rq5) tensor<int8>(v[16])
+            query(rq6) tensor<int8>(v[16])
+            query(rq7) tensor<int8>(v[16])
+            query(rq8) tensor<int8>(v[16])
+            query(rq9) tensor<int8>(v[16])
+            query(rq10) tensor<int8>(v[16])
+            query(rq11) tensor<int8>(v[16])
+            query(rq12) tensor<int8>(v[16])
+            query(rq13) tensor<int8>(v[16])
+            query(rq14) tensor<int8>(v[16])
+            query(rq15) tensor<int8>(v[16])
+            query(rq16) tensor<int8>(v[16])
+            query(rq17) tensor<int8>(v[16])
+            query(rq18) tensor<int8>(v[16])
+            query(rq19) tensor<int8>(v[16])
+            query(rq20) tensor<int8>(v[16])
+            query(rq21) tensor<int8>(v[16])
+            query(rq22) tensor<int8>(v[16])
+            query(rq23) tensor<int8>(v[16])
+            query(rq24) tensor<int8>(v[16])
+            query(rq25) tensor<int8>(v[16])
+            query(rq26) tensor<int8>(v[16])
+            query(rq27) tensor<int8>(v[16])
+            query(rq28) tensor<int8>(v[16])
+            query(rq29) tensor<int8>(v[16])
+            query(rq30) tensor<int8>(v[16])
+            query(rq31) tensor<int8>(v[16])
+            query(rq32) tensor<int8>(v[16])
+            query(rq33) tensor<int8>(v[16])
+            query(rq34) tensor<int8>(v[16])
+            query(rq35) tensor<int8>(v[16])
+            query(rq36) tensor<int8>(v[16])
+            query(rq37) tensor<int8>(v[16])
+            query(rq38) tensor<int8>(v[16])
+            query(rq39) tensor<int8>(v[16])
+            query(rq40) tensor<int8>(v[16])
+            query(rq41) tensor<int8>(v[16])
+            query(rq42) tensor<int8>(v[16])
+            query(rq43) tensor<int8>(v[16])
+            query(rq44) tensor<int8>(v[16])
+            query(rq45) tensor<int8>(v[16])
+            query(rq46) tensor<int8>(v[16])
+            query(rq47) tensor<int8>(v[16])
+            query(rq48) tensor<int8>(v[16])
+            query(rq49) tensor<int8>(v[16])
+            query(rq50) tensor<int8>(v[16])
+            query(rq51) tensor<int8>(v[16])
+            query(rq52) tensor<int8>(v[16])
+            query(rq53) tensor<int8>(v[16])
+            query(rq54) tensor<int8>(v[16])
+            query(rq55) tensor<int8>(v[16])
+            query(rq56) tensor<int8>(v[16])
+            query(rq57) tensor<int8>(v[16])
+            query(rq58) tensor<int8>(v[16])
+            query(rq59) tensor<int8>(v[16])
+            query(rq60) tensor<int8>(v[16])
+            query(rq61) tensor<int8>(v[16])
+            query(rq62) tensor<int8>(v[16])
+            query(rq63) tensor<int8>(v[16])
+            query(qt) tensor<float>(querytoken{}, v[128])
+            query(qtb) tensor<int8>(querytoken{}, v[16])
+
+        }
+        function similarities() {
+            expression {
+
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
+
+            }
+        }
+        function normalized() {
+            expression {
+
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        function max_sim() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        sum(
+                                            query(qt) * unpack_bits(attribute(embedding)), v
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        function max_sim_binary() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        1 / (1 + sum(
+                                            hamming(query(qtb), attribute(embedding)), v)
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        second-phase {
+            rerank-count: 10
+            expression {
+                max_sim
+            }
+        }
+    }
+    rank-profile colpali_sim inherits colpali {
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    rank-profile hybrid {
+        inputs {
+            query(rq0) tensor<int8>(v[16])
+            query(rq1) tensor<int8>(v[16])
+            query(rq2) tensor<int8>(v[16])
+            query(rq3) tensor<int8>(v[16])
+            query(rq4) tensor<int8>(v[16])
+            query(rq5) tensor<int8>(v[16])
+            query(rq6) tensor<int8>(v[16])
+            query(rq7) tensor<int8>(v[16])
+            query(rq8) tensor<int8>(v[16])
+            query(rq9) tensor<int8>(v[16])
+            query(rq10) tensor<int8>(v[16])
+            query(rq11) tensor<int8>(v[16])
+            query(rq12) tensor<int8>(v[16])
+            query(rq13) tensor<int8>(v[16])
+            query(rq14) tensor<int8>(v[16])
+            query(rq15) tensor<int8>(v[16])
+            query(rq16) tensor<int8>(v[16])
+            query(rq17) tensor<int8>(v[16])
+            query(rq18) tensor<int8>(v[16])
+            query(rq19) tensor<int8>(v[16])
+            query(rq20) tensor<int8>(v[16])
+            query(rq21) tensor<int8>(v[16])
+            query(rq22) tensor<int8>(v[16])
+            query(rq23) tensor<int8>(v[16])
+            query(rq24) tensor<int8>(v[16])
+            query(rq25) tensor<int8>(v[16])
+            query(rq26) tensor<int8>(v[16])
+            query(rq27) tensor<int8>(v[16])
+            query(rq28) tensor<int8>(v[16])
+            query(rq29) tensor<int8>(v[16])
+            query(rq30) tensor<int8>(v[16])
+            query(rq31) tensor<int8>(v[16])
+            query(rq32) tensor<int8>(v[16])
+            query(rq33) tensor<int8>(v[16])
+            query(rq34) tensor<int8>(v[16])
+            query(rq35) tensor<int8>(v[16])
+            query(rq36) tensor<int8>(v[16])
+            query(rq37) tensor<int8>(v[16])
+            query(rq38) tensor<int8>(v[16])
+            query(rq39) tensor<int8>(v[16])
+            query(rq40) tensor<int8>(v[16])
+            query(rq41) tensor<int8>(v[16])
+            query(rq42) tensor<int8>(v[16])
+            query(rq43) tensor<int8>(v[16])
+            query(rq44) tensor<int8>(v[16])
+            query(rq45) tensor<int8>(v[16])
+            query(rq46) tensor<int8>(v[16])
+            query(rq47) tensor<int8>(v[16])
+            query(rq48) tensor<int8>(v[16])
+            query(rq49) tensor<int8>(v[16])
+            query(rq50) tensor<int8>(v[16])
+            query(rq51) tensor<int8>(v[16])
+            query(rq52) tensor<int8>(v[16])
+            query(rq53) tensor<int8>(v[16])
+            query(rq54) tensor<int8>(v[16])
+            query(rq55) tensor<int8>(v[16])
+            query(rq56) tensor<int8>(v[16])
+            query(rq57) tensor<int8>(v[16])
+            query(rq58) tensor<int8>(v[16])
+            query(rq59) tensor<int8>(v[16])
+            query(rq60) tensor<int8>(v[16])
+            query(rq61) tensor<int8>(v[16])
+            query(rq62) tensor<int8>(v[16])
+            query(rq63) tensor<int8>(v[16])
+            query(qt) tensor<float>(querytoken{}, v[128])
+            query(qtb) tensor<int8>(querytoken{}, v[16])
+
+        }
+        function similarities() {
+            expression {
+
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
+
+            }
+        }
+        function normalized() {
+            expression {
+
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        function max_sim() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        sum(
+                                            query(qt) * unpack_bits(attribute(embedding)), v
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        function max_sim_binary() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        1 / (1 + sum(
+                                            hamming(query(qtb), attribute(embedding)), v)
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        second-phase {
+            rerank-count: 10
+            expression {
+                max_sim + 2 * (bm25(text) + bm25(title))
+            }
+        }
+    }
+    rank-profile hybrid_sim inherits hybrid {
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    document-summary default {
+        summary text {
+            bolding: on
+        }
+        summary snippet {
+            source: text
+            dynamic
+        }
+        from-disk
+    }
+    document-summary suggestions {
+        summary questions {}
+        from-disk
+    }
+}"""

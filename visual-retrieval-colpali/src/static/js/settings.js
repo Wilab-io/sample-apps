@@ -12,7 +12,7 @@ function initializeSettingsPage() {
     const addButton = document.getElementById('add-question');
     const rankerInputs = document.querySelectorAll('input[name="ranker"]');
     const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
-    const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"]');
+    const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"], textarea[name="schema"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
     // Initialize prompt textarea if it exists
@@ -237,35 +237,37 @@ function updateConnectionSaveButtonState() {
 function updateApplicationPackageSaveButtonState() {
     const tenantName = document.querySelector('input[name="tenant_name"]');
     const appName = document.querySelector('input[name="app_name"]');
+    const schema = document.querySelector('textarea[name="schema"]');
 
     const enabledButton = document.querySelector('#save-application-package');
     const disabledButton = document.querySelector('#save-application-package-disabled');
     const unsavedChanges = document.getElementById('application-package-unsaved-changes');
 
-    if (!tenantName || !appName) return;
+    if (!tenantName || !appName || !schema) return;
 
     const isValid = tenantName.value.trim() !== '' &&
-      appName.value.trim() !== '';
+                   appName.value.trim() !== '' &&
+                   schema.value.trim() !== '';
 
     // Check if any field has changed from its original value
-    const hasChanges = [tenantName, appName].some(input => {
-      const originalValue = input.getAttribute('data-original') || '';
-      return input.value.trim() !== originalValue.trim();
+    const hasChanges = [tenantName, appName, schema].some(input => {
+        const originalValue = input.getAttribute('data-original') || '';
+        return input.value.trim() !== originalValue.trim();
     });
 
     if (isValid) {
-      enabledButton.classList.remove('hidden');
-      disabledButton.classList.add('hidden');
+        enabledButton.classList.remove('hidden');
+        disabledButton.classList.add('hidden');
 
-      if (hasChanges) {
-        unsavedChanges.classList.remove('hidden');
-      } else {
-        unsavedChanges.classList.add('hidden');
-      }
+        if (hasChanges) {
+            unsavedChanges.classList.remove('hidden');
+        } else {
+            unsavedChanges.classList.add('hidden');
+        }
     } else {
-      enabledButton.classList.add('hidden');
-      disabledButton.classList.remove('hidden');
-      unsavedChanges.classList.add('hidden');
+        enabledButton.classList.add('hidden');
+        disabledButton.classList.remove('hidden');
+        unsavedChanges.classList.add('hidden');
     }
 }
 

@@ -402,6 +402,21 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                             ),
                             cls="space-y-2 mb-4"
                         ),
+                        Div(
+                            Label(
+                                "Schema ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="schema",
+                                cls="text-sm font-medium"
+                            ),
+                            Textarea(
+                                settings.schema if settings else '',
+                                cls="flex-1 w-full h-[200px] rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="schema",
+                                required=True
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
                         cls="mb-8"
                     ),
                     cls="max-w-[50%]"

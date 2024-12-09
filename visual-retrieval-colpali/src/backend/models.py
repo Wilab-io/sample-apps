@@ -49,5 +49,5 @@ class UserSettings(Base):
     vespa_cloud_endpoint = Column(String, nullable=True)
     tenant_name = Column(String, nullable=True)
     app_name = Column(String, nullable=True)
-    schema = Column(String, nullable=True)
+    schema = Column(Text, nullable=True)
     prompt = Column(Text, nullable=True)
