@@ -24,6 +24,40 @@ def DeploymentModal():
         cls="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40"
     )
 
+def DeploymentLoginModal(url: str):
+    return Div(
+        Div(
+            Div(
+                Div(
+                    Lucide(icon="circle-alert", cls="size-12 text-yellow-500"),
+                    cls="flex justify-center mb-4"
+                ),
+                H2(
+                    "Log in required",
+                    cls="text-xl font-semibold mb-2 text-gray-900 dark:text-white"
+                ),
+                P(
+                    "Please log in to your Vespa account to continue the deployment process",
+                    cls="text-gray-500 dark:text-gray-400 mb-6"
+                ),
+                Button(
+                    "Login",
+                    cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors",
+                    onclick=f"handleVespaLogin('{url}')"
+                ),
+                Button(
+                    "Continue",
+                    id="continue-btn",
+                    cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors mt-4 opacity-50 cursor-not-allowed",
+                    disabled=True
+                ),
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md max-w-md w-full text-center"
+            ),
+            cls="fixed inset-0 flex items-center justify-center z-50 p-4"
+        ),
+        cls="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40"
+    )
+
 def DeploymentSuccessModal():
     return Div(
         Div(
@@ -43,7 +77,7 @@ def DeploymentSuccessModal():
                 Button(
                     "OK",
                     cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors",
-                    onclick="document.getElementById('deployment-modal').remove()"
+                    onclick="closeDeploymentModal()"
                 ),
                 cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md max-w-md w-full text-center"
             ),

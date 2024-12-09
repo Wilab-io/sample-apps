@@ -276,15 +276,13 @@ def Hero():
     )
 
 
-async def Home(request=None):
-    settings = await request.app.db.get_user_settings(request.session["user_id"])
+async def Home(request, settings, appConfigured: bool):
     ranker = settings.ranker.value if hasattr(settings.ranker, 'value') else settings.ranker
-    is_deployed = getattr(request.app, 'deployed', False)
 
     return Div(
         Div(
             Hero(),
-            SearchBox(ranking_value=ranker, is_deployed=is_deployed),
+            SearchBox(ranking_value=ranker, is_deployed=appConfigured),
             await SampleQueries(request),
             ShareButtons(),
             cls="grid gap-8 content-start mt-[13vh]",
