@@ -662,7 +662,8 @@ async def update_application_package_settings(request):
 
     settings = {
         'tenant_name': form.get('tenant_name'),
-        'app_name': form.get('app_name')
+        'app_name': form.get('app_name'),
+        'schema': form.get('schema')
     }
 
     await request.app.db.update_settings(user_id, settings)
