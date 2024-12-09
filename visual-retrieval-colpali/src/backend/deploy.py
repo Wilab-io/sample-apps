@@ -499,7 +499,7 @@ async def deploy_application(request, settings: UserSettings, user_id: str, mode
         logger.info(f"Application deployed. Token endpoint URL: {endpoint_url}")
 
         # Save endpoint_url to the database
-        await request.app.db.update_user_settings(user_id, {"vespa_app_url": endpoint_url})
+        await request.app.db.update_user_settings(user_id, {"vespa_cloud_endpoint": endpoint_url})
 
         logger.info("Deployment completed successfully!")
 
