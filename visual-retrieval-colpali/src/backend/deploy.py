@@ -8,18 +8,10 @@ import logging
 from pydantic import BaseModel
 from vespa.package import (
     ApplicationPackage,
-    Field,
-    Schema,
-    Document,
-    HNSW,
+    AuthClient,
+    Parameter,
     RankProfile,
-    Function,
-    FieldSet,
-    SecondPhaseRanking,
-    Summary,
-    DocumentSummary,
 )
-from vespa.deployment import VespaCloud
 from vespa.configuration.services import (
     services,
     container,
@@ -54,376 +46,176 @@ from pypdf import PdfReader
 
 # ColPali model and processor
 from colpali_engine.models import ColPali, ColPaliProcessor
-from colpali_engine.utils.torch_utils import get_torch_device
 from vidore_benchmark.utils.image_utils import scale_image, get_base64_image
 
 # Other utilities
 from bs4 import BeautifulSoup
-import httpx
 from urllib.parse import urljoin, urlparse
 
 from PIL import Image
 import pytesseract
 
+import pty
+import subprocess
+import re
+import time
+import select
+
+from concurrent.futures import ThreadPoolExecutor
+
 logger = logging.getLogger("vespa_app")
 
-async def deploy_application(request, settings: UserSettings, user_id: str, model: ColPali, processor: ColPaliProcessor, docNames: dict[str, str]):
-    """Deploy the Vespa application"""
+async def deploy_application_step_1(settings: UserSettings):
+    logger.info("Validating settings")
+    if not all([
+        settings.tenant_name,
+        settings.app_name,
+        settings.vespa_token_id,
+        settings.vespa_token_value,
+        settings.gemini_token
+    ]):
+        raise ValueError("Missing required settings")
+
+    VESPA_TENANT_NAME = settings.tenant_name
+    VESPA_APPLICATION_NAME = settings.app_name
+
+    logger.info(f"Deploying application {VESPA_APPLICATION_NAME} to tenant {VESPA_TENANT_NAME}")
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(base_dir))
+    app_dir = os.path.join(parent_dir, "application")
+
+    logger.info(f"Running vespa commands on the application directory: {app_dir}")
+
+    current_dir = os.getcwd()
+
     try:
-        logger.info("Starting deployment process")
+        os.chdir(app_dir)
 
-        # Load environment variables
-        load_dotenv()
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
+        subprocess.run(["vespa", "config", "set", "target", "cloud"], check=True)
 
-        logger.info("Validating settings")
-        if not all([
-            settings.tenant_name,
-            settings.app_name,
-            settings.vespa_token_id,
-            settings.vespa_token_value,
-            settings.gemini_token
-        ]):
-            raise ValueError("Missing required settings")
+        app_config = f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}"
+        subprocess.run(["vespa", "config", "set", "application", app_config], check=True)
 
-        VESPA_TENANT_NAME = settings.tenant_name
-        VESPA_APPLICATION_NAME = settings.app_name
-        VESPA_SCHEMA_NAME = "pdf_page"
-        VESPA_TOKEN_ID_WRITE = settings.vespa_token_id
-        VESPA_TEAM_API_KEY = None
-        GEMINI_API_KEY = settings.gemini_token
+        subprocess.run(["vespa", "auth", "cert", "-f"], check=True)
 
-        # Configure Google Generative AI
-        genai.configure(api_key=GEMINI_API_KEY)
+        def run_auth_login():
+            master, slave = pty.openpty()
+            process = subprocess.Popen(
+                ["vespa", "auth", "login"],
+                stdin=slave,
+                stdout=slave,
+                stderr=slave,
+                text=True,
+                cwd=app_dir
+            )
 
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        storage_dir = os.path.join(base_dir, "storage/user_documents", user_id)
+            output = ""
+            answered_prompt = False
 
-        logger.info(f"Looking for PDFs in: {storage_dir}")
+            while True:
+                r, _, _ = select.select([master], [], [], 0.1)
+                if r:
+                    try:
+                        data = os.read(master, 1024).decode()
+                        output += data
 
-        if not os.path.exists(storage_dir):
-            raise FileNotFoundError(f"Directory not found: {storage_dir}")
+                        if not answered_prompt and "Automatically open confirmation page in your default browser? [Y/n]" in output:
+                            os.write(master, "n\n".encode())
+                            answered_prompt = True
 
-        pdfPaths = [
-            os.path.join(storage_dir, f)
-            for f in os.listdir(storage_dir)
-            if f.endswith(".pdf")
-        ]
+                        # Once we find the URL, we can return
+                        if "Please open link in your browser: " in data:
+                            # Kill the process since we don't need to wait for completion
+                            process.kill()
+                            os.close(master)
+                            os.close(slave)
+                            return output
 
-        imgPaths = [
-            os.path.join(storage_dir, f)
-            for f in os.listdir(storage_dir)
-            if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")
-        ]
+                    except OSError:
+                        break
 
-        if not pdfPaths and not imgPaths:
-            raise FileNotFoundError(f"No PDF or image files found in {storage_dir}")
+                # If process ends before we find URL, that's an error
+                if process.poll() is not None:
+                    break
 
-        logger.info(f"Found {len(pdfPaths)} PDF files and {len(imgPaths)} image files to process")
+            # Clean up
+            process.kill()
+            os.close(master)
+            os.close(slave)
+            return output
 
-        pdf_pages = []
+        # Create and start daemon thread for auth login
+        with ThreadPoolExecutor() as executor:
+            future = executor.submit(run_auth_login)
+            output = future.result()
 
-        # Process PDFs
-        for pdf_file in pdfPaths:
-            logger.info(f"Processing PDF: {os.path.basename(pdf_file)}")
-            images, texts = get_pdf_images(pdf_file)
-            logger.info(f"Extracted {len(images)} pages from {os.path.basename(pdf_file)}")
-            for page_no, (image, text) in enumerate(zip(images, texts)):
-                doc_id = os.path.splitext(os.path.basename(pdf_file))[0]
-                title = docNames.get(doc_id, "")
-                pdf_pages.append(
-                    {
-                        "title": title,
-                        "path": pdf_file,
-                        "image": image,
-                        "text": text,
-                        "page_no": page_no,
-                    }
-                )
+        logger.debug(f"Full output: {output}")
 
-        # Process Images
-        for img_file in imgPaths:
-            logger.info(f"Processing image: {os.path.basename(img_file)}")
-            images, texts = get_image_with_text(img_file)
-            logger.info(f"Extracted text from {os.path.basename(img_file)}")
-            for page_no, (image, text) in enumerate(zip(images, texts)):
-                doc_id = os.path.splitext(os.path.basename(img_file))[0]
-                title = docNames.get(doc_id, "")
-                pdf_pages.append(
-                    {
-                        "title": title,
-                        "path": img_file,
-                        "image": image,
-                        "text": text,
-                        "page_no": page_no,
-                    }
-                )
+        url_match = re.search(r'Please open link in your browser: (https://[^\s]+)', output)
+        if not url_match:
+            raise Exception("Could not find authentication URL in command output")
 
-        logger.info(f"Total processed: {len(pdf_pages)} pages")
+        auth_url = url_match.group(1)
+        logger.info(f"Authentication URL found: {auth_url}")
 
-        prompt_text, pydantic_model = settings.prompt, GeneratedQueries
+        # Load certificate files
+        cert_dir = os.path.expanduser(f"~/.vespa/{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.default")
+        logger.debug(f"Looking for certificates in: {cert_dir}")
 
-        for pdf in tqdm(pdf_pages):
-            image = pdf.get("image")
-            pdf["queries"] = generate_queries(image, prompt_text, pydantic_model)
+        private_key_path = os.path.join(cert_dir, "data-plane-private-key.pem")
+        public_cert_path = os.path.join(cert_dir, "data-plane-public-cert.pem")
 
-        images = [pdf["image"] for pdf in pdf_pages]
-        embeddings = generate_embeddings(images, model, processor)
+        # Wait a bit for files to be created
+        max_retries = 10
+        retry_count = 0
+        while retry_count < max_retries:
+            if os.path.exists(private_key_path) and os.path.exists(public_cert_path):
+                break
+            time.sleep(1)
+            retry_count += 1
+            logger.debug(f"Waiting for certificate files... attempt {retry_count}/{max_retries}")
 
-        logger.info(f"Generated {len(embeddings)} embeddings")
+        if not os.path.exists(private_key_path) or not os.path.exists(public_cert_path):
+            raise FileNotFoundError(f"Certificate files not found in {cert_dir}")
 
-        vespa_feed = []
-        for pdf, embedding in zip(pdf_pages, embeddings):
-            title = pdf["title"]
-            image = pdf["image"]
-            text = pdf.get("text", "")
-            page_no = pdf["page_no"]
-            query_dict = pdf["queries"]
-            questions = [v for k, v in query_dict.items() if "question" in k and v]
-            queries = [v for k, v in query_dict.items() if "query" in k and v]
-            base_64_image = get_base64_image(
-                scale_image(image, 32), add_url_prefix=False
-            )  # Scaled down image to return fast on search (~1kb)
-            base_64_full_image = get_base64_image(image, add_url_prefix=False)
-            embedding_dict = {k: v for k, v in enumerate(embedding)}
-            binary_embedding = float_to_binary_embedding(embedding_dict)
-            # id_hash should be md5 hash of url and page_number
-            id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
-            page = {
-                "id": id_hash,
-                "fields": {
-                    "id": id_hash,
-                    "title": title,
-                    "page_number": page_no,
-                    "blur_image": base_64_image,
-                    "full_image": base_64_full_image,
-                    "text": text,
-                    "embedding": binary_embedding,
-                    "queries": queries,
-                    "questions": questions,
-                },
-            }
-            vespa_feed.append(page)
+        # Read certificate files
+        with open(private_key_path, 'r') as f:
+            private_key = f.read()
+        with open(public_cert_path, 'r') as f:
+            public_cert = f.read()
 
-        # Define the Vespa schema
-        colpali_schema = Schema(
-            name=VESPA_SCHEMA_NAME,
-            document=Document(
-                fields=[
-                    Field(
-                        name="id",
-                        type="string",
-                        indexing=["summary", "index"],
-                        match=["word"],
-                    ),
-                    Field(name="url", type="string", indexing=["summary", "index"]),
-                    Field(name="year", type="int", indexing=["summary", "attribute"]),
-                    Field(
-                        name="title",
-                        type="string",
-                        indexing=["summary", "index"],
-                        match=["text"],
-                        index="enable-bm25",
-                    ),
-                    Field(name="page_number", type="int", indexing=["summary", "attribute"]),
-                    Field(name="blur_image", type="raw", indexing=["summary"]),
-                    Field(name="full_image", type="raw", indexing=["summary"]),
-                    Field(
-                        name="text",
-                        type="string",
-                        indexing=["summary", "index"],
-                        match=["text"],
-                        index="enable-bm25",
-                    ),
-                    Field(
-                        name="embedding",
-                        type="tensor<int8>(patch{}, v[16])",
-                        indexing=[
-                            "attribute",
-                            "index",
-                        ],
-                        ann=HNSW(
-                            distance_metric="hamming",
-                            max_links_per_node=32,
-                            neighbors_to_explore_at_insert=400,
-                        ),
-                    ),
-                    Field(
-                        name="questions",
-                        type="array<string>",
-                        indexing=["summary", "attribute"],
-                        summary=Summary(fields=["matched-elements-only"]),
-                    ),
-                    Field(
-                        name="queries",
-                        type="array<string>",
-                        indexing=["summary", "attribute"],
-                        summary=Summary(fields=["matched-elements-only"]),
-                    ),
-                ]
-            ),
-            fieldsets=[
-                FieldSet(
-                    name="default",
-                    fields=["title", "text"],
-                ),
-            ],
-            document_summaries=[
-                DocumentSummary(
-                    name="default",
-                    summary_fields=[
-                        Summary(
-                            name="text",
-                            fields=[("bolding", "on")],
-                        ),
-                        Summary(
-                            name="snippet",
-                            fields=[("source", "text"), "dynamic"],
-                        ),
-                    ],
-                    from_disk=True,
-                ),
-                DocumentSummary(
-                    name="suggestions",
-                    summary_fields=[
-                        Summary(name="questions"),
-                    ],
-                    from_disk=True,
-                ),
-            ],
-        )
+        # Set environment variables
+        os.environ["VESPA_CLOUD_MTLS_KEY"] = private_key
+        os.environ["VESPA_CLOUD_MTLS_CERT"] = public_cert
 
-        # Define similarity functions used in all rank profiles
-        mapfunctions = [
-            Function(
-                name="similarities",  # computes similarity scores between each query token and image patch
-                expression="""
-                        sum(
-                            query(qt) * unpack_bits(attribute(embedding)), v
-                        )
-                    """,
-            ),
-            Function(
-                name="normalized",  # normalizes the similarity scores to [-1, 1]
-                expression="""
-                        (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
-                    """,
-            ),
-            Function(
-                name="quantized",  # quantizes the normalized similarity scores to signed 8-bit integers [-128, 127]
-                expression="""
-                        cell_cast(normalized * 127.999, int8)
-                    """,
-            ),
-        ]
+        logger.info("Successfully loaded certificate files")
 
-        # Define the 'bm25' rank profile
-        bm25 = RankProfile(
-            name="bm25",
-            inputs=[("query(qt)", "tensor<float>(querytoken{}, v[128])")],
-            first_phase="bm25(title) + bm25(text)",
-            functions=mapfunctions,
-        )
+        return {"status": "success", "auth_url": auth_url}
 
-        colpali_schema.add_rank_profile(bm25)
-        colpali_schema.add_rank_profile(with_quantized_similarity(bm25))
+    except Exception as e:
+        raise
+    finally:
+        os.chdir(current_dir)
 
+async def deploy_application_step_2(request, settings: UserSettings, user_id: str, model: ColPali, processor: ColPaliProcessor, docNames: dict[str, str]):
+    """Deploy the Vespa application"""
+    # Load environment variables
+    load_dotenv()
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        # Update the 'colpali' rank profile
-        input_query_tensors = []
-        MAX_QUERY_TERMS = 64
-        for i in range(MAX_QUERY_TERMS):
-            input_query_tensors.append((f"query(rq{i})", "tensor<int8>(v[16])"))
+    VESPA_APPLICATION_NAME = settings.app_name
+    VESPA_SCHEMA_NAME = "pdf_page"
+    VESPA_TOKEN_ID_WRITE = settings.vespa_token_id
+    GEMINI_API_KEY = settings.gemini_token
 
-        input_query_tensors.extend(
-            [
-                ("query(qt)", "tensor<float>(querytoken{}, v[128])"),
-                ("query(qtb)", "tensor<int8>(querytoken{}, v[16])"),
-            ]
-        )
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(base_dir))
+    storage_dir = os.path.join(parent_dir, "src/storage/user_documents", user_id)
+    app_dir = os.path.join(parent_dir, "application")
 
-        colpali = RankProfile(
-            name="colpali",
-            inputs=input_query_tensors,
-            first_phase="max_sim_binary",
-            second_phase=SecondPhaseRanking(expression="max_sim", rerank_count=10),
-            functions=mapfunctions
-            + [
-                Function(
-                    name="max_sim",
-                    expression="""
-                        sum(
-                            reduce(
-                                sum(
-                                    query(qt) * unpack_bits(attribute(embedding)), v
-                                ),
-                                max, patch
-                            ),
-                            querytoken
-                        )
-                    """,
-                ),
-                Function(
-                    name="max_sim_binary",
-                    expression="""
-                        sum(
-                            reduce(
-                                1 / (1 + sum(
-                                    hamming(query(qtb), attribute(embedding)), v)
-                                ),
-                                max, patch
-                            ),
-                            querytoken
-                        )
-                    """,
-                ),
-            ],
-        )
-        colpali_schema.add_rank_profile(colpali)
-        colpali_schema.add_rank_profile(with_quantized_similarity(colpali))
-
-        # Update the 'hybrid' rank profile
-        hybrid = RankProfile(
-            name="hybrid",
-            inputs=input_query_tensors,
-            first_phase="max_sim_binary",
-            second_phase=SecondPhaseRanking(
-                expression="max_sim + 2 * (bm25(text) + bm25(title))", rerank_count=10
-            ),
-            functions=mapfunctions
-            + [
-                Function(
-                    name="max_sim",
-                    expression="""
-                        sum(
-                            reduce(
-                                sum(
-                                    query(qt) * unpack_bits(attribute(embedding)), v
-                                ),
-                                max, patch
-                            ),
-                            querytoken
-                        )
-                    """,
-                ),
-                Function(
-                    name="max_sim_binary",
-                    expression="""
-                        sum(
-                            reduce(
-                                1 / (1 + sum(
-                                    hamming(query(qtb), attribute(embedding)), v)
-                                ),
-                                max, patch
-                            ),
-                            querytoken
-                        )
-                    """,
-                ),
-            ],
-        )
-        colpali_schema.add_rank_profile(hybrid)
-        colpali_schema.add_rank_profile(with_quantized_similarity(hybrid))
+    try:
+        logger.debug("Generating services.xml")
 
         service_config = ServicesConfiguration(
             application_name=VESPA_APPLICATION_NAME,
@@ -475,33 +267,226 @@ async def deploy_application(request, settings: UserSettings, user_id: str, mode
             ),
         )
 
-        # Create the Vespa application package
+        # Create the Vespa application package and save it to services.xml
         vespa_application_package = ApplicationPackage(
             name=VESPA_APPLICATION_NAME,
-            schema=[colpali_schema],
             services_config=service_config,
+            auth_clients=[
+                AuthClient(
+                    id="mtls",
+                    permissions="read,write",
+                    parameters=[Parameter("certificate", {"file": "security/clients.pem"})],
+                ),
+            ],
         )
 
-        vespa_cloud = VespaCloud(
-            tenant=VESPA_TENANT_NAME,
-            application=VESPA_APPLICATION_NAME,
-            key_content=VESPA_TEAM_API_KEY,
-            application_package=vespa_application_package,
-            auth_client_token_id=f"{VESPA_TOKEN_ID_WRITE}",
-        )
+        servicesXml = vespa_application_package.services_to_text
+        services_xml_path = os.path.join(app_dir, "services.xml")
+        with open(services_xml_path, "w") as f:
+            f.write(servicesXml)
 
-        logger.info(f"Deploying application {VESPA_APPLICATION_NAME} to tenant {VESPA_TENANT_NAME}")
+        # Write the schema to its file
+        from pathlib import Path
 
-        # Deploy the application
-        vespa_cloud.deploy()
+        schema_dir = Path(parent_dir) / "application/schemas"
+        schema_file = schema_dir / "pdf_page.sd"
 
-        endpoint_url = vespa_cloud.get_token_endpoint()
-        logger.info(f"Application deployed. Token endpoint URL: {endpoint_url}")
+        logger.debug(f"Writing schema to {schema_file}")
 
-        # Save endpoint_url to the database
-        await request.app.db.update_user_settings(user_id, {"vespa_cloud_endpoint": endpoint_url})
+        schema_file.write_text(settings.schema)
 
-        logger.info("Deployment completed successfully!")
+        import time
+        time.sleep(2)
+
+        import subprocess
+
+        # Store current directory
+        current_dir = os.getcwd()
+
+        try:
+            logger.debug("Running deploy commands")
+
+            # Change to application directory
+            os.chdir(app_dir)
+
+            process = subprocess.Popen(
+                ["vespa", "deploy", "--wait", "500"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True
+            )
+
+            endpoint_url = ""
+            for line in iter(process.stdout.readline, ''):
+                logger.info(line.strip())
+                if "Found endpoints:" in line:
+                    # Read the next two lines to get to the URL line
+                    next(process.stdout)  # Skip "- dev.aws-us-east-*" line
+                    url_line = next(process.stdout)
+                    # Extract URL from line like " |-- https://d110fb1d.f78833a9.z.vespa-app.cloud/ (cluster '*_container')"
+                    match = re.search(r'https://[^\s]+', url_line)
+                    if match:
+                        endpoint_url = match.group(0)
+                        logger.info(f"Found endpoint URL: {endpoint_url}")
+
+            process.wait()
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, "vespa deploy")
+
+            if not endpoint_url:
+                raise Exception("Failed to find endpoint URL in deployment output")
+
+            # Save endpoint_url to the database
+            await request.app.db.update_settings(user_id, {"vespa_cloud_endpoint": endpoint_url})
+
+            logger.info(f"Deployment completed successfully! Endpoint URL: {endpoint_url}")
+        finally:
+            # Always restore the original working directory
+            os.chdir(current_dir)
+
+        # Configure Google Generative AI
+        genai.configure(api_key=GEMINI_API_KEY)
+
+        logger.info(f"Looking for documents in: {storage_dir}")
+
+        if not os.path.exists(storage_dir):
+            raise FileNotFoundError(f"Directory not found: {storage_dir}")
+
+        pdfPaths = [
+            os.path.join(storage_dir, f)
+            for f in os.listdir(storage_dir)
+            if f.endswith(".pdf")
+        ]
+
+        imgPaths = [
+            os.path.join(storage_dir, f)
+            for f in os.listdir(storage_dir)
+            if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")
+        ]
+
+        if not pdfPaths and not imgPaths:
+            raise FileNotFoundError(f"No PDF or image files found in {storage_dir}")
+
+        logger.info(f"Found {len(pdfPaths)} PDF files and {len(imgPaths)} image files to process")
+
+        pdf_pages = []
+
+        # Process PDFs
+        for pdf_file in pdfPaths:
+            logger.debug(f"Processing PDF: {os.path.basename(pdf_file)}")
+            images, texts = get_pdf_images(pdf_file)
+            logger.debug(f"Extracted {len(images)} pages from {os.path.basename(pdf_file)}")
+            for page_no, (image, text) in enumerate(zip(images, texts)):
+                doc_id = os.path.splitext(os.path.basename(pdf_file))[0]
+                title = docNames.get(doc_id, "")
+                static_path = f"/storage/user_documents/{user_id}/{os.path.basename(pdf_file)}"
+                pdf_pages.append(
+                    {
+                        "title": title,
+                        "path": pdf_file,
+                        "url": static_path,
+                        "image": image,
+                        "text": text,
+                        "page_no": page_no,
+                    }
+                )
+
+        # Process Images
+        for img_file in imgPaths:
+            logger.debug(f"Processing image: {os.path.basename(img_file)}")
+            images, texts = get_image_with_text(img_file)
+            logger.debug(f"Extracted text from {os.path.basename(img_file)}")
+            for page_no, (image, text) in enumerate(zip(images, texts)):
+                doc_id = os.path.splitext(os.path.basename(img_file))[0]
+                title = docNames.get(doc_id, "")
+                static_path = f"/storage/user_documents/{user_id}/{os.path.basename(img_file)}"
+                pdf_pages.append(
+                    {
+                        "title": title,
+                        "path": img_file,
+                        "url": static_path,
+                        "image": image,
+                        "text": text,
+                        "page_no": page_no,
+                    }
+                )
+
+        logger.info(f"Total processed: {len(pdf_pages)} pages")
+
+        prompt_text, pydantic_model = settings.prompt, GeneratedQueries
+
+        logger.debug(f"Generating queries")
+
+        for pdf in tqdm(pdf_pages):
+            image = pdf.get("image")
+            pdf["queries"] = generate_queries(image, prompt_text, pydantic_model)
+
+        images = [pdf["image"] for pdf in pdf_pages]
+        embeddings = generate_embeddings(images, model, processor)
+
+        logger.info(f"Generated {len(embeddings)} embeddings")
+
+        vespa_feed = []
+        for pdf, embedding in zip(pdf_pages, embeddings):
+            title = pdf["title"]
+            image = pdf["image"]
+            url = pdf["url"]
+            text = pdf.get("text", "")
+            page_no = pdf["page_no"]
+            query_dict = pdf["queries"]
+            questions = [v for k, v in query_dict.items() if "question" in k and v]
+            queries = [v for k, v in query_dict.items() if "query" in k and v]
+            base_64_image = get_base64_image(
+                scale_image(image, 32), add_url_prefix=False
+            )  # Scaled down image to return fast on search (~1kb)
+            base_64_full_image = get_base64_image(image, add_url_prefix=False)
+            embedding_dict = {k: v for k, v in enumerate(embedding)}
+            binary_embedding = float_to_binary_embedding(embedding_dict)
+            # id_hash should be md5 hash of url and page_number
+            id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
+            page = {
+                "id": id_hash,
+                "fields": {
+                    "id": id_hash,
+                    "title": title,
+                    "url": url,
+                    "page_number": page_no,
+                    "blur_image": base_64_image,
+                    "full_image": base_64_full_image,
+                    "text": text,
+                    "embedding": binary_embedding,
+                    "queries": queries,
+                    "questions": questions,
+                },
+            }
+            vespa_feed.append(page)
+
+        with open(app_dir + "/vespa_feed.json", "w") as f:
+            vespa_feed_to_save = []
+            for page in vespa_feed:
+                document_id = page["id"]
+                put_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
+                vespa_feed_to_save.append({"put": put_id, "fields": page["fields"]})
+            json.dump(vespa_feed_to_save, f)
+
+        logger.debug(f"Saved vespa feed to {app_dir}/vespa_feed.json")
+
+        current_dir = os.getcwd()
+
+        try:
+            logger.debug("Feeding vespa application")
+
+            # Change to application directory
+            os.chdir(app_dir)
+
+            subprocess.run(["vespa", "feed", "vespa_feed.json", "--progress", "5"], check=True)
+
+            logger.info(f"Feeding completed successfully!")
+        finally:
+            # Always restore the original working directory
+            os.chdir(current_dir)
+
+        return {"status": "success"}
 
     except Exception as e:
         logger.error(f"Deployment failed: {str(e)}")

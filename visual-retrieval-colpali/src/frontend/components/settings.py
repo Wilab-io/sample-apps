@@ -33,7 +33,7 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
             cls="bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
             id="deploy-button",
             **{
-                "hx-post": "/api/deploy",
+                "hx-post": "/api/deploy-part-1",
                 "hx-swap": "none"
             }
         ) if appConfigured else Button(

@@ -16,7 +16,7 @@ from backend.models import UserSettings
 class VespaQueryClient:
     MAX_QUERY_TERMS = 64
     VESPA_SCHEMA_NAME = "pdf_page"
-    SELECT_FIELDS = "id,title,blur_image,page_number,snippet,text"
+    SELECT_FIELDS = "id,title,url,blur_image,page_number,snippet,text"
 
     def __init__(self, logger: logging.Logger, settings: UserSettings):
         """
@@ -32,8 +32,10 @@ class VespaQueryClient:
 
             self.vespa_app_url = os.environ.get("VESPA_APP_MTLS_URL")
             if not self.vespa_app_url:
-                raise ValueError(
-                    "Please set the VESPA_APP_MTLS_URL environment variable"
+                self.vespa_app_url = settings.vespa_cloud_endpoint
+                if not self.vespa_app_url:
+                    raise ValueError(
+                    "Please set the VESPA_APP_MTLS_URL environment variable or setting"
                 )
 
             if not mtls_cert or not mtls_key:
@@ -444,15 +446,15 @@ class VespaQueryClient:
         Returns:
             bool: True if the connection is alive.
         """
-        # async with self.app.asyncio(connections=1) as session:
-        #     response: VespaQueryResponse = await session.query(
-        #         body={
-        #             "yql": f"select title from {self.VESPA_SCHEMA_NAME} where true limit 1;",
-        #             "ranking": "unranked",
-        #             "query": "keepalive",
-        #             "timeout": "3s",
-        #             "hits": 1,
-        #         },
-        #     )
-        #     assert response.is_successful(), response.json
+        async with self.app.asyncio(connections=1) as session:
+            response: VespaQueryResponse = await session.query(
+                body={
+                    "yql": f"select title from {self.VESPA_SCHEMA_NAME} where true limit 1;",
+                    "ranking": "unranked",
+                    "query": "keepalive",
+                    "timeout": "3s",
+                    "hits": 1,
+                },
+            )
+            assert response.is_successful(), response.json
         return True
