@@ -98,6 +98,18 @@ class Database:
             if file_ext not in ['.pdf', '.png', '.jpg', '.jpeg']:
                 raise ValueError(f"Unsupported file type: {file_ext}")
 
+            # Convert PNG to JPG before database operations
+            if file_ext != ".jpg":
+                from PIL import Image
+                from io import BytesIO
+                with BytesIO(file_content) as bio:
+                    im = Image.open(bio)
+                    rgb_im = im.convert('RGB')
+                    output_bio = BytesIO()
+                    rgb_im.save(output_bio, format='JPEG')
+                    file_content = output_bio.getvalue()
+                file_ext = '.jpg'
+
             async with self.get_session() as session:
                 new_document = UserDocument(
                     user_id=UUID(user_id),
@@ -120,7 +132,13 @@ class Database:
         except Exception as e:
             logger.error(f"Error adding document {document_name}: {str(e)}")
             if 'new_document' in locals():
-                await self.delete_document(new_document.document_id)
+                async with self.get_session() as session:
+                    result = await session.execute(
+                        select(UserDocument).where(UserDocument.document_id == new_document.document_id)
+                    )
+                    document = result.scalar_one_or_none()
+                    if document:
+                        await self.delete_document(document.document_id)
             raise
 
     async def delete_document(self, document_id: str):
