@@ -156,15 +156,15 @@ async def Links(request=None):
                     A(
                         "My documents",
                         href="/my-documents",
-                        cls="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-md"
+                        cls="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 rounded-[10px]"
                     ),
                     Div(cls="h-px bg-gray-200 dark:bg-gray-700 mx-1 my-1"),  # Divider
                     A(
                         "Log out",
                         href="/logout",
-                        cls="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700 rounded-md"
+                        cls="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:text-red-400 dark:hover:bg-gray-700 rounded-[10px]"
                     ),
-                    cls="absolute right-0 w-48 py-1 bg-white dark:bg-gray-800 rounded-md shadow-lg ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50 rounded-[10px] shadow-lg"
+                    cls="absolute right-0 w-48 py-1 bg-white dark:bg-gray-800 rounded-[10px] shadow-md ring-1 ring-black ring-opacity-5 opacity-0 invisible group-hover:opacity-100 group-hover:visible z-50"
                 ),
                 cls="relative group"
             ),
