@@ -5,6 +5,7 @@ import time
 import logging
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from fasthtml.common import StaticFiles
 from pathlib import Path
 
 import google.generativeai as genai
@@ -35,6 +36,7 @@ from backend.models import User
 
 from backend.colpali import SimMapGenerator
 from backend.vespa_app import VespaQueryClient
+from backend.models import UserSettings
 from frontend.app import (
     AboutThisDemo,
     ChatResult,
@@ -51,6 +53,8 @@ from backend.middleware import login_required
 from backend.init_db import init_default_users
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
+from backend.deploy import deploy_application_step_1, deploy_application_step_2
+from frontend.components.deployment import DeploymentModal, DeploymentLoginModal,DeploymentSuccessModal, DeploymentErrorModal
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -77,6 +81,7 @@ awesomplete_js = Script(
     src="https://cdnjs.cloudflare.com/ajax/libs/awesomplete/1.1.7/awesomplete.min.js"
 )
 sselink = Script(src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js")
+deployment_js = Script(src="/static/js/deployment.js")
 
 # Get log level from environment variable, default to INFO
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -109,23 +114,32 @@ app, rt = fast_app(
         sselink,
         ShadHead(tw_cdn=False, theme_handle=True),
         settings_js,
+        deployment_js,
     ),
 )
-vespa_app: Vespa = VespaQueryClient(logger=logger)
 thread_pool = ThreadPoolExecutor()
-# Gemini config
+app.deployed = False
 
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images.
-If the user query can not be interpreted as a question, or if the answer to the query can not be inferred from the images,
-answer with the exact phrase "I am sorry, I can't find enough relevant information on these pages to answer your question.".
-Your response should be HTML formatted, but only simple tags, such as <b>. <p>, <i>, <br> <ul> and <li> are allowed. No HTML tables.
-This means that newlines will be replaced with <br> tags, bold text will be enclosed in <b> tags, and so on.
-Do NOT include backticks (`) in your response. Only simple HTML tags and text.
-"""
-gemini_model = genai.GenerativeModel(
-    "gemini-1.5-flash-8b", system_instruction=GEMINI_SYSTEM_PROMPT
-)
+def configure_static_routes(app):
+    app.mount("/storage", StaticFiles(directory="storage"), name="storage")
+
+configure_static_routes(app)
+
+# Gemini config
+def configure_gemini(api_key: str):
+    genai.configure(api_key=api_key)
+    GEMINI_SYSTEM_PROMPT = """If the user query is a question, try your best to answer it based on the provided images.
+    If the user query can not be interpreted as a question, or if the answer to the query can not be inferred from the images,
+    answer with the exact phrase "I am sorry, I can't find enough relevant information on these pages to answer your question.".
+    Your response should be HTML formatted, but only simple tags, such as <b>. <p>, <i>, <br> <ul> and <li> are allowed. No HTML tables.
+    This means that newlines will be replaced with <br> tags, bold text will be enclosed in <b> tags, and so on.
+    Do NOT include backticks (`) in your response. Only simple HTML tags and text.
+    """
+    app.gemini_model = genai.GenerativeModel(
+        "gemini-1.5-flash-8b", system_instruction=GEMINI_SYSTEM_PROMPT
+    )
+
+
 STATIC_DIR = Path("static")
 IMG_DIR = STATIC_DIR / "full_images"
 SIM_MAP_DIR = STATIC_DIR / "sim_maps"
@@ -142,7 +156,6 @@ def shutdown_db():
 def load_model_on_startup():
     app.sim_map_generator = SimMapGenerator(logger=logger)
     return
-
 
 @app.on_event("startup")
 async def keepalive():
@@ -172,7 +185,9 @@ def serve_static(filepath: str):
 @rt("/")
 @login_required
 async def get(request):
-    return await Layout(Main(await Home(request)), is_home=True, request=request)
+    user_id = request.session["user_id"]
+    settings = await request.app.db.get_user_settings(user_id)
+    return await Layout(Main(await Home(request, settings.ranker.value, app.deployed)), is_home=True, request=request)
 
 
 @rt("/about-this-demo")
@@ -183,7 +198,7 @@ async def get(request):
 
 @rt("/search")
 @login_required
-async def get(request, query: str = "", ranking: str = "hybrid"):
+async def get(request, query: str = "", ranking: str = "colpali"):
     logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}")
 
     # Always render the SearchBox first
@@ -238,7 +253,7 @@ async def get(session, request, query: str, ranking: str):
 
     start = time.perf_counter()
     # Fetch real search results from Vespa
-    result = await vespa_app.get_result_from_query(
+    result = await app.vespa_app.get_result_from_query(
         query=query,
         q_embs=q_embs,
         ranking=ranking,
@@ -252,7 +267,7 @@ async def get(session, request, query: str, ranking: str):
     # Safely get total_count with a default of 0
     total_count = result.get("root", {}).get("fields", {}).get("totalCount", 0)
 
-    search_results = vespa_app.results_to_search_results(result, idx_to_token)
+    search_results = app.vespa_app.results_to_search_results(result, idx_to_token)
 
     get_and_store_sim_maps(
         query_id=query_id,
@@ -277,8 +292,9 @@ def get_results_children(result):
 async def poll_vespa_keepalive():
     while True:
         await asyncio.sleep(5)
-        await vespa_app.keepalive()
-        logger.debug(f"Vespa keepalive: {time.time()}")
+        if hasattr(app, "vespa_app") and app.vespa_app:
+            await app.vespa_app.keepalive()
+            logger.debug(f"Vespa keepalive: {time.time()}")
 
 
 @threaded
@@ -286,7 +302,7 @@ def get_and_store_sim_maps(
     query_id, query: str, q_embs, ranking, idx_to_token, doc_ids
 ):
     ranking_sim = ranking + "_sim"
-    vespa_sim_maps = vespa_app.get_sim_maps_from_query(
+    vespa_sim_maps = app.vespa_app.get_sim_maps_from_query(
         query=query,
         q_embs=q_embs,
         ranking=ranking_sim,
@@ -320,9 +336,9 @@ def get_and_store_sim_maps(
     return True
 
 
-@app.get("/get_sim_map")
+@rt("/get_sim_map")
 @login_required
-async def get_sim_map(query_id: str, idx: int, token: str, token_idx: int):
+async def get_sim_map(request, query_id: str, idx: int, token: str, token_idx: int):
     """
     Endpoint that each of the sim map button polls to get the sim map image
     when it is ready. If it is not ready, returns a SimMapButtonPoll, that
@@ -346,15 +362,14 @@ async def get_sim_map(query_id: str, idx: int, token: str, token_idx: int):
         )
 
 
-@app.get("/full_image")
-@login_required
+@rt("/full_image")
 async def full_image(doc_id: str):
     """
     Endpoint to get the full quality image for a given result id.
     """
     img_path = IMG_DIR / f"{doc_id}.jpg"
     if not os.path.exists(img_path):
-        image_data = await vespa_app.get_full_image_from_vespa(doc_id)
+        image_data = await app.vespa_app.get_full_image_from_vespa(doc_id)
         # image data is base 64 encoded string. Save it to disk as jpg.
         with open(img_path, "wb") as f:
             f.write(base64.b64decode(image_data))
@@ -376,7 +391,7 @@ async def get_suggestions(query: str = ""):
     query = query.lower().strip()
 
     if query:
-        suggestions = await vespa_app.get_suggestions(query)
+        suggestions = await app.vespa_app.get_suggestions(query)
         if len(suggestions) > 0:
             return JSONResponse({"suggestions": suggestions})
 
@@ -386,12 +401,13 @@ async def get_suggestions(query: str = ""):
 async def message_generator(query_id: str, query: str, doc_ids: list):
     """Generator function to yield SSE messages for chat response"""
     images = []
-    num_images = 3  # Number of images before firing chat request
+    num_images = min(3, len(doc_ids))  # Use min to avoid index out of range
     max_wait = 10  # seconds
     start_time = time.time()
+
     # Check if full images are ready on disk
     while (
-        len(images) < min(num_images, len(doc_ids))
+        len(images) < num_images
         and time.time() - start_time < max_wait
     ):
         images = []
@@ -422,7 +438,7 @@ async def message_generator(query_id: str, query: str, doc_ids: list):
         return text.replace("\n", "<br>")
 
     response_text = ""
-    async for chunk in await gemini_model.generate_content_async(
+    async for chunk in await app.gemini_model.generate_content_async(
         images + ["\n\n Query: ", query], stream=True
     ):
         if chunk.text:
@@ -433,9 +449,9 @@ async def message_generator(query_id: str, query: str, doc_ids: list):
     yield "event: close\ndata: \n\n"
 
 
-@app.get("/get-message")
+@rt("/get-message")
 @login_required
-async def get_message(query_id: str, query: str, doc_ids: str):
+async def get_message(request, query_id: str, query: str, doc_ids: str):
     return StreamingResponse(
         message_generator(query_id=query_id, query=query, doc_ids=doc_ids.split(",")),
         media_type="text/event-stream",
@@ -446,7 +462,7 @@ async def get_message(query_id: str, query: str, doc_ids: str):
 @login_required
 async def get(request):
     return await Layout(
-        Main(Div(P(f"Connected to Vespa at {vespa_app.url}"), cls="p-4")),
+        Main(Div(P(f"Connected to Vespa at {app.vespa_app.url}"), cls="p-4")),
         request=request
     )
 
@@ -566,12 +582,16 @@ async def get(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    app_configured = await request.app.db.is_application_configured(user_id)
+
+    logger.debug(f"Application configuration check: {app_configured}")
 
     return await Layout(
         Settings(
             active_tab=tab,
             settings=settings,
-            username=request.session["username"]
+            username=request.session["username"],
+            appConfigured=app_configured,
         ),
         request=request
     )
@@ -590,11 +610,14 @@ async def get_settings_content(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    app_configured = await request.app.db.is_application_configured(user_id)
 
+    logger.debug(f"Application configuration check: {app_configured}")
     return TabContent(
         tab,
         settings,
-        username=request.session["username"]
+        username=request.session["username"],
+        appConfigured=app_configured
     )
 
 @rt("/api/settings/demo-questions", methods=["POST"])
@@ -612,7 +635,7 @@ async def update_demo_questions(request):
 
     if questions:
         user_id = request.session["user_id"]
-        await request.app.db.update_demo_questions(user_id, questions)
+        await request.app.db.update_settings(user_id, {'demo_questions': questions})
 
     return Redirect("/settings?tab=ranker")
 
@@ -621,8 +644,9 @@ async def update_demo_questions(request):
 async def update_ranker(request):
     user_id = request.session["user_id"]
     form = await request.form()
-    ranker = form.get("ranker", "colpali")
-    await request.app.db.update_user_ranker(user_id, ranker)
+    ranker = form.get("ranker")
+
+    await request.app.db.update_settings(user_id, {'ranker': ranker})
 
     return Redirect("/settings?tab=connection")
 
@@ -635,14 +659,34 @@ async def update_connection_settings(request):
     settings = {
         'vespa_host': form.get('vespa_host'),
         'vespa_port': int(form.get('vespa_port')) if form.get('vespa_port') else None,
-        'vespa_token': form.get('vespa_token'),
+        'vespa_token_id': form.get('vespa_token_id'),
+        'vespa_token_value': form.get('vespa_token_value'),
         'gemini_token': form.get('gemini_token'),
         'vespa_cloud_endpoint': form.get('vespa_cloud_endpoint')
     }
 
-    await request.app.db.update_connection_settings(user_id, settings)
+    await request.app.db.update_settings(user_id, settings)
 
-    return Redirect("/settings?tab=prompt")
+    return Redirect("/settings?tab=application-package")
+
+@rt("/api/settings/application-package", methods=["POST"])
+@login_required
+async def update_application_package_settings(request):
+    user_id = request.session["user_id"]
+    form = await request.form()
+
+    settings = {
+        'tenant_name': form.get('tenant_name'),
+        'app_name': form.get('app_name'),
+        'schema': form.get('schema')
+    }
+
+    await request.app.db.update_settings(user_id, settings)
+
+    if request.session["username"] != "admin":
+        return Redirect("/settings?tab=application-package")
+    else:
+        return Redirect("/settings?tab=prompt")
 
 @rt("/api/settings/prompt", methods=["POST"])
 @login_required
@@ -652,7 +696,7 @@ async def update_prompt_settings(request):
 
     form = await request.form()
     prompt = form.get('prompt')
-    await request.app.db.update_prompt_settings(request.session["user_id"], prompt)
+    await request.app.db.update_settings(request.session["user_id"], {'prompt': prompt})
 
     return Redirect("/settings?tab=prompt")
 
@@ -672,6 +716,80 @@ async def login(request):
         return Redirect("/")
 
     return Redirect("/login?error=invalid")
+
+@app.post("/api/deploy-part-1")
+@login_required
+async def deploy_part_1(request):
+    try:
+        user_id = request.session["user_id"]
+        settings: UserSettings = await request.app.db.get_user_settings(user_id)
+        if not settings:
+            logger.error("Settings not found")
+            return {"status": "error", "message": "Settings not found"}
+
+        result = await deploy_application_step_1(settings)
+        return result
+
+    except Exception as e:
+        logger.error(f"Deployment error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/api/deploy-part-2")
+@login_required
+async def deploy_part_2(request):
+    try:
+        user_id = request.session["user_id"]
+        settings: UserSettings = await request.app.db.get_user_settings(user_id)
+        if not settings:
+            logger.error("Settings not found")
+            return {"status": "error", "message": "Settings not found"}
+
+        model = app.sim_map_generator.model
+        processor = app.sim_map_generator.processor
+        documents = await request.app.db.get_user_documents(user_id)
+        doc_names = {doc.document_id: doc.document_name for doc in documents}
+
+        result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
+
+        # Read the settings again to get the new URL
+        settings: UserSettings = await request.app.db.get_user_settings(user_id)
+        if not settings:
+            logger.error("Settings not found")
+            return {"status": "error", "message": "Settings not found"}
+
+        app.vespa_app = VespaQueryClient(logger=logger, settings=settings)
+
+        # Configure Gemini with the API key
+        configure_gemini(settings.gemini_token)
+
+        app.deployed = True
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Deployment error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+@rt("/deployment-modal")
+@login_required
+async def get_deployment_modal(request):
+    return DeploymentModal()
+
+@rt("/deployment-modal/login")
+@login_required
+async def get_deployment_login_modal(request):
+    auth_url = request.query_params.get("auth_url", "")
+    return DeploymentLoginModal(url=auth_url)
+
+@rt("/deployment-modal/success")
+@login_required
+async def get_deployment_success_modal(request):
+    return DeploymentSuccessModal()
+
+@rt("/deployment-modal/error")
+@login_required
+async def get_deployment_error_modal(request):
+    return DeploymentErrorModal()
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
