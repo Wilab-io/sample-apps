@@ -85,6 +85,8 @@ async def deploy_application_step_1(settings: UserSettings):
     parent_dir = os.path.dirname(os.path.dirname(base_dir))
     app_dir = os.path.join(parent_dir, "application")
 
+    copy_api_key_file(app_dir, VESPA_TENANT_NAME)
+
     logger.info(f"Running vespa commands on the application directory: {app_dir}")
 
     current_dir = os.getcwd()
@@ -608,3 +610,14 @@ def with_quantized_similarity(rank_profile: RankProfile) -> RankProfile:
         inherits=rank_profile.name,
         summary_features=["quantized"],
     )
+
+def copy_api_key_file(app_dir, VESPA_TENANT_NAME):
+    api_key_src = os.path.join(app_dir, f"{VESPA_TENANT_NAME}.api-key.pem")
+    api_key_dest = os.path.expanduser("~/.vespa")
+    os.makedirs(api_key_dest, exist_ok=True)
+    if os.path.exists(api_key_src):
+        import shutil
+        shutil.copy2(api_key_src, api_key_dest)
+        logger.info(f"Copied API key from {api_key_src} to {api_key_dest}")
+    else:
+        logger.warning(f"API key file not found at {api_key_src}")
