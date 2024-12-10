@@ -199,7 +199,9 @@ def ShareButtons():
 
 
 class SearchBox:
-    def __init__(self, query_value: str = "", ranking_value: str = "", is_deployed: bool = False):
+    grid_cls = "grid gap-2 p-3 rounded-md border border-input bg-muted w-full ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-input"
+
+    def __init__(self, query_value: str = "", ranking_value: str = "colpali", is_deployed: bool = False):
         self.query_value = query_value
         self.ranking_value = ranking_value
         self.is_deployed = is_deployed
@@ -220,9 +222,17 @@ class SearchBox:
                     f"Ranking by: {self.ranking_value.title()}" if self.is_deployed else "",
                     cls="text-sm text-muted-foreground mt-2"
                 ),
-                cls="w-full max-w-2xl mx-auto",
-                action=f"/search?ranking={self.ranking_value}",
-                method="GET"
+                check_input_script,
+                autocomplete_script,
+                submit_form_on_radio_change,
+                action=f"/search?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
+                method="GET",
+                hx_get=f"/fetch_results?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
+                hx_trigger="load",
+                hx_target="#search-results",
+                hx_swap="outerHTML",
+                hx_indicator="#loading-indicator",
+                cls=self.grid_cls,
             ),
             cls="py-8 w-full"
         )
@@ -276,13 +286,11 @@ def Hero():
     )
 
 
-async def Home(request, settings, appConfigured: bool):
-    ranker = settings.ranker.value if hasattr(settings.ranker, 'value') else settings.ranker
-
+async def Home(request, ranker: str = "colpali", app_deployed: bool = False):
     return Div(
         Div(
             Hero(),
-            SearchBox(ranking_value=ranker, is_deployed=appConfigured),
+            SearchBox(ranking_value=ranker, is_deployed=app_deployed),
             await SampleQueries(request),
             ShareButtons(),
             cls="grid gap-8 content-start mt-[13vh]",
@@ -408,11 +416,11 @@ def AboutThisDemo():
 
 def Search(request, search_results=[]):
     query_value = request.query_params.get("query", "").strip()
-    ranking_value = request.query_params.get("ranking", "hybrid")
+    ranking_value = request.query_params.get("ranking", "colpali")
     return Div(
         Div(
             Div(
-                SearchBox(query_value=query_value, ranking_value=ranking_value),
+                SearchBox(query_value=query_value, ranking_value=ranking_value, is_deployed=  True),
                 Div(
                     LoadingMessage(),
                     id="search-results",  # This will be replaced by the search results
