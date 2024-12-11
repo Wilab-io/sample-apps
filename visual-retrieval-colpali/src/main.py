@@ -57,6 +57,7 @@ from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
 from backend.deploy import deploy_application_step_1, deploy_application_step_2
 from frontend.components.deployment import DeploymentModal, DeploymentLoginModal,DeploymentSuccessModal, DeploymentErrorModal
+from frontend.components.image_search import ImageSearchModal
 
 highlight_js_theme_link = Link(id="highlight-theme", rel="stylesheet", href="")
 highlight_js_theme = Script(src="/static/js/highlightjs-theme.js")
@@ -1017,6 +1018,11 @@ async def image_search(request):
         logger.error(f"Error processing image search: {str(e)}")
         logger.error(f"Error traceback:", exc_info=True)  # This will log the full traceback
         return JSONResponse({"error": str(e)}, status_code=400)
+
+@rt("/image-search-modal")
+@login_required
+async def get_image_search_modal(request):
+    return ImageSearchModal()
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
