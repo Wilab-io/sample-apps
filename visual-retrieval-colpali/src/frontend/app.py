@@ -205,14 +205,32 @@ class SearchBox:
     def __ft__(self):
         return Div(
             Form(
-                Input(
-                    type="search",
-                    name="query",
-                    placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
-                    value=self.query_value,
-                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
-                    autofocus=True,
-                    disabled=not self.is_deployed
+                Div(
+                    Input(
+                        type="search",
+                        name="query",
+                        placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
+                        value=self.query_value,
+                        cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
+                        autofocus=True,
+                        disabled=not self.is_deployed
+                    ),
+                    Button(
+                        Lucide(icon="camera", size="20"),
+                        type="button",
+                        cls="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-muted rounded-full",
+                        disabled=not self.is_deployed,
+                        onclick="document.getElementById('image-upload').click()"
+                    ),
+                    Input(
+                        type="file",
+                        id="image-upload",
+                        name="image",
+                        accept="image/*",
+                        cls="hidden",
+                        onchange="handleImageUpload(this)"
+                    ),
+                    cls="relative"
                 ),
                 P(
                     f"Ranking by: {self.ranking_value.title()}" if self.is_deployed else "",
@@ -578,6 +596,14 @@ def SearchResult(
     total_count: int = 0,
     doc_id: Optional[str] = None,
 ):
+    if not results:
+        return Div(
+            P(
+                "No results found for your query.",
+                cls="text-muted-foreground text-base text-center",
+            ),
+            cls="grid p-10",
+        )
     # If no doc_id is provided, show the results list view
     if doc_id is None:
         return ResultsList(results, query, query_id, search_time, total_count)
@@ -651,33 +677,30 @@ def SearchResult(
             Div(
                 Div(
                     Div(
-                        Div(
-                            A(
-                                Lucide(icon="arrow-left"),
-                                href=f"/search?query={quote_plus(query)}",
-                                cls="text-sm hover:underline p-4 rounded-full text-white bg-black border-none p-2",
-                            ),
-                            Lucide(icon="file-text"),
-                            H2(fields["title"], cls="text-xl md:text-2xl font-semibold text-blue-500"),
-                            Separator(orientation="vertical"),
-                            Badge(
-                                f"Relevance score: {result['relevance']:.4f}",
-                                cls="text-sm rounded-full text-white bg-black border-none p-2",
-                            ),
-                            cls="flex items-center gap-2",
+                        A(
+                            Lucide(icon="arrow-left"),
+                            href=f"/search?query={quote_plus(query)}",
+                            cls="text-sm hover:underline rounded-full text-white bg-black border-none p-1",
                         ),
-                        Div(
-                            Button(
-                                "Hide Text",
-                                size="sm",
-                                id="toggle-button-0",
-                                onclick="toggleTextContent(0)",
-                                cls="hidden md:block rounded-full bg-black text-white p-2",
-                            ),
+                        Lucide(icon="file-text"),
+                        H2(fields["title"], cls="text-xl md:text-2xl font-semibold"),
+                        Separator(orientation="vertical"),
+                        Badge(
+                            f"Relevance score: {result['relevance']:.4f}",
+                            cls="flex gap-1.5 items-center justify-center",
                         ),
-                        cls="flex flex-wrap items-center justify-between bg-background px-3 py-4",
+                        cls="flex items-center gap-2",
                     ),
-                    cls="bg-background border-b",
+                    Div(
+                        Button(
+                            "Hide Text",
+                            size="sm",
+                            id=f"toggle-button-0",
+                            onclick=f"toggleTextContent(0)",
+                            cls="hidden md:block",
+                        ),
+                    ),
+                    cls="flex flex-wrap items-center justify-between bg-background px-3 py-4",
                 ),
                 Div(
                     Div(
@@ -708,7 +731,7 @@ def SearchResult(
                             ),
                             cls="block",
                         ),
-                        id="image-column-0",
+                        id=f"image-column-0",
                         cls="image-column relative bg-background px-3 py-5 grid-image-column",
                     ),
                     Div(
@@ -737,7 +760,7 @@ def SearchResult(
                                             ),
                                             cls="grid grid-rows-[auto_0px] content-start gap-y-3",
                                         ),
-                                        id="result-text-snippet-0",
+                                        id=f"result-text-snippet-0",
                                         cls="grid gap-y-3 p-8 border border-dashed",
                                     ),
                                     Div(
@@ -756,7 +779,7 @@ def SearchResult(
                                                 ),
                                                 cls="grid grid-rows-[auto_0px] content-start gap-y-3",
                                             ),
-                                            id="result-text-full-0",
+                                            id=f"result-text-full-0",
                                             cls="grid gap-y-3 p-8 border border-dashed",
                                         ),
                                         Div(
@@ -770,16 +793,13 @@ def SearchResult(
                             ),
                             cls="grid bg-muted p-2",
                         ),
-                        id="text-column-0",
+                        id=f"text-column-0",
                         cls="text-column relative bg-background px-3 py-5 hidden md-grid-text-column",
                     ),
-                    id="image-text-columns-0",
+                    id=f"image-text-columns-0",
                     cls="relative grid grid-cols-1 border-t grid-image-text-columns",
                 ),
-                image_swapping,
-                toggle_text_content,
-                dynamic_elements_scrollbars,
-                cls="grid grid-cols-1 grid-rows-[auto_1fr] min-h-0",
+                cls="grid grid-cols-1 grid-rows-[auto_auto_1fr]",
             ),
             cls="grid gap-4 w-full max-w-screen-xl mx-auto px-4",
         ),
