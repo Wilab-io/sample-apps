@@ -52,7 +52,7 @@ from frontend.app import (
 from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
-from backend.init_db import init_default_users
+from backend.init_db import init_default_users, clear_image_queries
 from frontend.components.my_documents import MyDocuments
 from frontend.components.settings import Settings, TabContent
 from backend.deploy import deploy_application_step_1, deploy_application_step_2
@@ -173,6 +173,7 @@ async def keepalive():
 async def startup_event():
     try:
         os.environ["USE_MTLS"] = "true"
+        await clear_image_queries(logger)
         await init_default_users(logger)
     except SystemExit:
         logger.error("Application Startup Failed")
@@ -192,6 +193,8 @@ def serve_static(filepath: str):
 @rt("/")
 @login_required
 async def get(request):
+    if "user_id" not in request.session:
+        return Redirect("/login")
     user_id = request.session["user_id"]
     settings = await request.app.db.get_user_settings(user_id)
     return await Layout(Main(await Home(request, settings.ranker.value, app.deployed)), is_home=True, request=request)
