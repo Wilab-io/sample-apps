@@ -526,7 +526,6 @@ async def full_image(doc_id: str):
 
 
 @rt("/suggestions")
-@login_required
 async def get_suggestions(query: str = ""):
     """Endpoint to get suggestions as user types in the search box"""
     query = query.lower().strip()

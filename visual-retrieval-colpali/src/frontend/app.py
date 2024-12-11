@@ -31,14 +31,10 @@ check_input_script = Script(
         window.onload = function() {
             const input = document.getElementById('search-input');
             const button = document.querySelector('[data-button="search-button"]');
-            const radioGroupItems = document.querySelectorAll('button[data-ref="radio-item"]');  // Get all radio buttons
 
             function checkInputValue() {
                 const isInputEmpty = input.value.trim() === "";
                 button.disabled = isInputEmpty;  // Disable the submit button
-                radioGroupItems.forEach(item => {
-                    item.disabled = isInputEmpty;  // Disable/enable the radio buttons
-                });
             }
 
             input.addEventListener('input', checkInputValue);  // Listen for input changes
@@ -208,6 +204,7 @@ class SearchBox:
                 Div(
                     Input(
                         type="search",
+                        id="search-input",
                         name="query",
                         placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
                         value=self.query_value,
@@ -237,6 +234,8 @@ class SearchBox:
                     cls="text-sm text-muted-foreground mt-2"
                 ),
                 check_input_script,
+                toggle_text_content,
+                image_swapping,
                 autocomplete_script,
                 submit_form_on_radio_change,
                 action=f"/search?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
@@ -476,7 +475,7 @@ def SimMapButtonReady(query_id, idx, token, token_idx, img_src):
         size="sm",
         data_image_src=img_src,
         id=f"sim-map-button-{query_id}-{idx}-{token_idx}-{token}",
-        cls="sim-map-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2",
+        cls="sim-map-button pointer-events-auto font-mono text-xs h-5 rounded-full px-2 bg-black text-white p-2 ml-1 mb-1",
     )
 
 
@@ -666,7 +665,7 @@ def SearchResult(
         variant="outline",
         size="sm",
         data_image_src=blur_image_base64,
-        cls="reset-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2",
+        cls="reset-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2 ml-1 mb-1",
     )
 
     tokens_icon = Lucide(icon="images", size="15")
@@ -674,7 +673,7 @@ def SearchResult(
         tokens_icon,
         "Tokens",
         size="sm",
-        cls="tokens-button flex gap-[3px] font-bold pointer-events-none font-mono text-xs h-5 rounded-none px-2",
+        cls="tokens-button flex gap-[3px] font-bold pointer-events-none font-mono text-xs h-5 rounded-none px-2 mb-1",
     )
 
     return Div(
@@ -703,7 +702,7 @@ def SearchResult(
                             size="sm",
                             id=f"toggle-button-0",
                             onclick=f"toggleTextContent(0)",
-                            cls="hidden md:block",
+                            cls="hidden md:block rounded-full bg-black text-white p-2",
                         ),
                     ),
                     cls="flex flex-wrap items-center justify-between bg-background px-3 py-4",
