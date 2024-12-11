@@ -340,17 +340,9 @@ async def get(request, query: str = "", ranking: str = "colpali", image_query: s
     # Show the loading message if a query is provided
     return await Layout(
         Main(
-            Div(
-                SearchBox(query_value=query, ranking_value=ranking),
-                Div(
-                    P(
-                        "Loading results...",
-                        cls="text-center text-muted-foreground",
-                    ),
-                    cls="p-10",
-                ),
-                cls="grid",
-            )
+            Search(request, query_id=query_id, query=query),
+            data_overlayscrollbars_initialize=True,
+            cls="border-t"
         ),
         request=request
     )
