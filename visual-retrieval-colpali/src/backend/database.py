@@ -99,7 +99,7 @@ class Database:
                 raise ValueError(f"Unsupported file type: {file_ext}")
 
             # Convert PNG to JPG before database operations
-            if file_ext != ".jpg":
+            if file_ext != ".jpg" and file_ext != ".pdf":
                 from PIL import Image
                 from io import BytesIO
                 with BytesIO(file_content) as bio:
@@ -157,8 +157,7 @@ class Database:
                     logger.warning(f"Document {document_id} not found in database")
                     return
 
-                storage_dir = Path("storage/user_documents")
-                file_path = storage_dir / str(document.user_id) / f"{document_id}{document.file_extension}"
+                file_path = STORAGE_DIR / str(document.user_id) / f"{document_id}{document.file_extension}"
                 if file_path.exists():
                     file_path.unlink()
                     logger.info(f"Deleted file {file_path}")

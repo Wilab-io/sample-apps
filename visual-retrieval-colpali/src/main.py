@@ -521,8 +521,6 @@ async def logout(request):
         del request.session["username"]
     return Redirect("/login")
 
-STORAGE_DIR = Path("storage/user_documents")
-
 @rt("/upload-files", methods=["POST"])
 @login_required
 async def upload_files(request):
