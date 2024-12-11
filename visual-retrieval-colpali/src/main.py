@@ -4,6 +4,9 @@ import os
 import time
 import logging
 import sys
+import torch
+import pytesseract
+from io import BytesIO
 from concurrent.futures import ThreadPoolExecutor
 from fasthtml.common import StaticFiles
 from pathlib import Path
@@ -81,6 +84,7 @@ awesomplete_js = Script(
 )
 sselink = Script(src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js")
 deployment_js = Script(src="/static/js/deployment.js")
+image_search_js = Script(src="/static/js/image-search.js")
 
 # Get log level from environment variable, default to INFO
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -114,6 +118,7 @@ app, rt = fast_app(
         ShadHead(tw_cdn=False, theme_handle=True),
         settings_js,
         deployment_js,
+        image_search_js,
     ),
 )
 thread_pool = ThreadPoolExecutor()
@@ -176,7 +181,7 @@ async def startup_event():
 
 def generate_query_id(query, ranking_value):
     hash_input = (query + ranking_value).encode("utf-8")
-    return hash(hash_input)
+    return str(abs(hash(hash_input)))
 
 
 @rt("/static/{filepath:path}")
@@ -200,11 +205,11 @@ async def get(request):
 
 @rt("/search")
 @login_required
-async def get(request, query: str = "", ranking: str = "colpali"):
-    logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}")
+async def get(request, query: str = "", ranking: str = "colpali", image_query: str = None):
+    logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}, image_query: {image_query}")
 
     # Always render the SearchBox first
-    if not query:
+    if not query and not image_query:
         return await Layout(
             Main(
                 Div(
@@ -221,6 +226,57 @@ async def get(request, query: str = "", ranking: str = "colpali"):
             ),
             request=request
         )
+
+    if image_query:
+        logger.info(f"Processing image query with ID: {image_query}")
+        image_query_data = await app.db.get_image_query(image_query)
+
+        if not image_query_data:
+            logger.error(f"Image query not found: {image_query}")
+            return await Layout(
+                Main(
+                    Div(
+                        SearchBox(query_value="", ranking_value=ranking),
+                        Div(
+                            P(
+                                "Image query not found.",
+                                cls="text-center text-muted-foreground",
+                            ),
+                            cls="p-10",
+                        ),
+                        cls="grid",
+                    )
+                ),
+                request=request
+            )
+
+        logger.info(f"Found image query data: visual_only={image_query_data.is_visual_only}")
+        embeddings = torch.tensor(image_query_data.embeddings)
+
+        if image_query_data.is_visual_only:
+            logger.info("Using visual-only search")
+            results = await app.vespa_app.query_vespa_colpali(
+                query="",  # Empty query for visual-only search
+                q_emb=embeddings,
+                ranking="colpali",
+                sim_map=True,
+                visual_only=True
+            )
+        else:
+            logger.info("Using hybrid search with text and visual features")
+            results = await app.vespa_app.query_vespa_colpali(
+                query=image_query_data.text,
+                q_emb=embeddings,
+                ranking="hybrid",
+                sim_map=True
+            )
+
+        logger.info(f"Found {len(results)} results")
+        return await Layout(
+            Main(Search(request, results)),
+            request=request
+        )
+
     # Generate a unique query_id based on the query and ranking value
     query_id = generate_query_id(query, ranking)
     # Show the loading message if a query is provided
@@ -261,8 +317,9 @@ async def get(session, request, query: str, ranking: str):
 
     search_results = app.vespa_app.results_to_search_results(result, idx_to_token)
 
-    # Store the results in the cache
+    # Store the results in the cache using string query_id
     request.app.results_cache[query_id] = search_results
+    logger.info(f"Stored {len(search_results)} results in cache with query_id: {query_id}")
 
     get_and_store_sim_maps(
         query_id=query_id,
@@ -296,39 +353,65 @@ async def poll_vespa_keepalive():
 def get_and_store_sim_maps(
     query_id, query: str, q_embs, ranking, idx_to_token, doc_ids
 ):
-    ranking_sim = ranking + "_sim"
-    vespa_sim_maps = app.vespa_app.get_sim_maps_from_query(
-        query=query,
-        q_embs=q_embs,
-        ranking=ranking_sim,
-        idx_to_token=idx_to_token,
-    )
-    img_paths = [IMG_DIR / f"{doc_id}.jpg" for doc_id in doc_ids]
-    # All images should be downloaded, but best to wait 5 secs
-    max_wait = 5
-    start_time = time.time()
-    while (
-        not all([os.path.exists(img_path) for img_path in img_paths])
-        and time.time() - start_time < max_wait
-    ):
-        time.sleep(0.2)
-    if not all([os.path.exists(img_path) for img_path in img_paths]):
-        logger.warning(f"Images not ready in 5 seconds for query_id: {query_id}")
-        return False
-    sim_map_generator = app.sim_map_generator.gen_similarity_maps(
-        query=query,
-        query_embs=q_embs,
-        token_idx_map=idx_to_token,
-        images=img_paths,
-        vespa_sim_maps=vespa_sim_maps,
-    )
-    for idx, token, token_idx, blended_img_base64 in sim_map_generator:
-        with open(SIM_MAP_DIR / f"{query_id}_{idx}_{token_idx}.png", "wb") as f:
-            f.write(base64.b64decode(blended_img_base64))
-        logger.debug(
-            f"Sim map saved to disk for query_id: {query_id}, idx: {idx}, token: {token}"
+    try:
+        logger.info(f"Starting sim map generation for query_id: {query_id}")
+        ranking_sim = ranking + "_sim"
+        vespa_sim_maps = app.vespa_app.get_sim_maps_from_query(
+            query=query,
+            q_embs=q_embs,
+            ranking=ranking_sim,
+            idx_to_token=idx_to_token,
         )
-    return True
+        logger.info(f"Retrieved {len(vespa_sim_maps)} sim maps from Vespa")
+
+        img_paths = [IMG_DIR / f"{doc_id}.jpg" for doc_id in doc_ids]
+        logger.info(f"Checking for images at paths: {img_paths}")
+
+        # Download any missing images first
+        missing_images = [(doc_id, path) for doc_id, path in zip(doc_ids, img_paths) if not os.path.exists(path)]
+        if missing_images:
+            logger.info(f"Downloading {len(missing_images)} missing images...")
+            for doc_id, path in missing_images:
+                try:
+                    image_data = asyncio.run(app.vespa_app.get_full_image_from_vespa(doc_id))
+                    with open(path, "wb") as f:
+                        f.write(base64.b64decode(image_data))
+                    logger.debug(f"Downloaded image for doc_id: {doc_id}")
+                except Exception as e:
+                    logger.error(f"Failed to download image for doc_id {doc_id}: {str(e)}")
+                    return False
+
+        # Verify all images are now available
+        if not all([os.path.exists(img_path) for img_path in img_paths]):
+            logger.error("Some images still missing after download attempt")
+            return False
+
+        logger.debug("All images found, generating similarity maps")
+        sim_map_generator = app.sim_map_generator.gen_similarity_maps(
+            query=query,
+            query_embs=q_embs,
+            token_idx_map=idx_to_token,
+            images=img_paths,
+            vespa_sim_maps=vespa_sim_maps,
+        )
+
+        for idx, token, token_idx, blended_img_base64 in sim_map_generator:
+            sim_map_path = SIM_MAP_DIR / f"{query_id}_{idx}_{token_idx}.png"
+            try:
+                with open(sim_map_path, "wb") as f:
+                    f.write(base64.b64decode(blended_img_base64))
+                logger.info(
+                    f"Sim map saved to disk for query_id: {query_id}, idx: {idx}, token: {token}"
+                )
+            except Exception as e:
+                logger.error(f"Error saving sim map to {sim_map_path}: {str(e)}")
+
+        logger.info(f"Completed sim map generation for query_id: {query_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error in get_and_store_sim_maps: {str(e)}")
+        logger.error("Error traceback:", exc_info=True)
+        return False
 
 
 @rt("/get_sim_map")
@@ -431,6 +514,10 @@ async def message_generator(query_id: str, query: str, doc_ids: list):
     # If newlines are present in the response, the connection will be closed.
     def replace_newline_with_br(text):
         return text.replace("\n", "<br>")
+
+    # If query is empty (visual search), use a default prompt
+    if not query.strip():
+        query = "Describe what you see in these images and their key visual elements."
 
     response_text = ""
     async for chunk in await app.gemini_model.generate_content_async(
@@ -801,13 +888,14 @@ async def get_deployment_error_modal(request):
 @rt("/detail")
 @login_required
 async def get(request, doc_id: str, query_id: str, query: str):
-    logger.info(f"/detail: Showing details for doc_id: {doc_id}, query: {query}")
+    logger.info(f"/detail: Showing details for query_id: {query_id}, query: {query}")
 
-    # Convert query_id to int since it's stored as an integer key
-    query_id_int = int(query_id)
-
-    # Get the results from the cache
-    results = request.app.results_cache.get(query_id_int, [])
+    try:
+        results = request.app.results_cache.get(query_id, [])
+        logger.info(f"Found {len(results)} results in cache for query_id: {query_id}")
+    except (ValueError, TypeError) as e:
+        logger.error(f"Error getting result from cache: {str(e)}")
+        results = []
 
     return await Layout(
         Main(
@@ -822,6 +910,67 @@ async def get(request, doc_id: str, query_id: str, query: str):
         ),
         request=request
     )
+
+@rt("/api/image-search", methods=["POST"])
+@login_required
+async def image_search(request):
+    try:
+        logger.info("Image search endpoint called")
+        form = await request.form()
+        image_file = form["image"]
+        logger.info(f"Received image file: {image_file.filename}")
+
+        image_content = await image_file.read()
+        logger.info(f"Read image content, size: {len(image_content)} bytes")
+
+        image = Image.open(BytesIO(image_content))
+        logger.info(f"Opened image: {image.size}, mode: {image.mode}")
+
+        # Process the image using the processor
+        logger.info("Processing image with ColPali processor")
+        processed_image = app.sim_map_generator.processor.process_images([image])
+        logger.info(f"Processed image keys: {processed_image.keys()}")
+
+        processed_image = {k: v.to(app.sim_map_generator.model.device) for k, v in processed_image.items()}
+        logger.info(f"Moved tensors to device: {app.sim_map_generator.model.device}")
+
+        # Generate embeddings using the model
+        logger.info("Generating embeddings")
+        with torch.no_grad():
+            embeddings = app.sim_map_generator.model(**processed_image)
+        logger.info(f"Generated embeddings shape: {embeddings.shape}")
+
+        try:
+            logger.info("Extracting text with OCR")
+            text = pytesseract.image_to_string(image)
+            logger.info(f"Extracted text length: {len(text)}")
+        except Exception as ocr_error:
+            logger.error(f"OCR failed: {str(ocr_error)}")
+            text = ""
+
+        # Store the query information
+        query_id = generate_query_id(text or "image_query", "image_search")
+        logger.info(f"Generated query ID: {query_id}")
+
+        # If no text was found, we'll rely purely on visual similarity
+        is_visual_only = not bool(text.strip())
+        logger.info(f"Is visual only: {is_visual_only}")
+
+        logger.info("Storing image query in database")
+        await app.db.store_image_query(query_id, embeddings[0], text, is_visual_only)
+        logger.info("Successfully stored image query")
+
+        response_data = {
+            "query_id": query_id,
+            "is_visual_only": is_visual_only
+        }
+        logger.info(f"Returning response: {response_data}")
+        return JSONResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error processing image search: {str(e)}")
+        logger.error(f"Error traceback:", exc_info=True)  # This will log the full traceback
+        return JSONResponse({"error": str(e)}, status_code=400)
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"

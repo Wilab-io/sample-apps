@@ -1,4 +1,4 @@
-from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Text
+from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Text, Float, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
@@ -49,3 +49,12 @@ class UserSettings(Base):
     instance_name = Column(String, nullable=True)
     schema = Column(Text, nullable=True)
     prompt = Column(Text, nullable=True)
+
+class ImageQuery(Base):
+    __tablename__ = "image_queries"
+
+    query_id = Column(String, primary_key=True)
+    embeddings = Column(ARRAY(Float))
+    text = Column(Text)
+    is_visual_only = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())

@@ -8,12 +8,14 @@ class LRUCache:
         self.cache = OrderedDict()
 
     def get(self, key):
+        key = str(key)
         if key in self.cache:
             self.cache.move_to_end(key)
             return self.cache[key]
         return None
 
     def set(self, key, value):
+        key = str(key)
         if key in self.cache:
             self.cache.move_to_end(key)
         else:
@@ -22,5 +24,6 @@ class LRUCache:
         self.cache[key] = value
 
     def delete(self, key):
+        key = str(key)
         if key in self.cache:
             del self.cache[key]

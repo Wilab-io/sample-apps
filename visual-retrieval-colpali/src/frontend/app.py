@@ -638,7 +638,7 @@ def SearchResult(
             sim_map_buttons.append(
                 SimMapButtonReady(
                     query_id=query_id,
-                    idx=0,  # Since we're showing a single result
+                    idx=0,
                     token=token,
                     token_idx=token_idx,
                     img_src=sim_map_base64,
@@ -648,7 +648,7 @@ def SearchResult(
             sim_map_buttons.append(
                 SimMapButtonPoll(
                     query_id=query_id,
-                    idx=0,  # Since we're showing a single result
+                    idx=0,
                     token=token,
                     token_idx=token_idx,
                 )

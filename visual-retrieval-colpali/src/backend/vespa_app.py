@@ -11,6 +11,7 @@ from .colpali import SimMapGenerator
 import backend.stopwords
 import logging
 from backend.models import UserSettings
+import httpx
 
 
 class VespaQueryClient:
@@ -193,12 +194,27 @@ class VespaQueryClient:
             Tuple[str, dict]: Nearest neighbor query string and query tensor dictionary.
         """
         nn_query_dict = {}
-        for i in range(len(binary_query_embeddings)):
-            nn_query_dict[f"input.query(rq{i})"] = binary_query_embeddings[i]
+        # Limit the number of terms to process
+        max_terms = min(len(binary_query_embeddings), self.MAX_QUERY_TERMS)
+
+        # Sort embeddings by magnitude and take top terms
+        embeddings_with_magnitude = []
+        for i, vector in binary_query_embeddings.items():
+            magnitude = sum(abs(x) for x in vector)
+            embeddings_with_magnitude.append((i, vector, magnitude))
+
+        # Sort by magnitude in descending order and take top terms
+        sorted_embeddings = sorted(embeddings_with_magnitude, key=lambda x: x[2], reverse=True)[:max_terms]
+
+        # Create query dictionary with only the most significant terms
+        for i, (orig_idx, vector, _) in enumerate(sorted_embeddings):
+            nn_query_dict[f"input.query(rq{i})"] = vector
+
+        # Create OR clauses only for the selected terms
         nn = " OR ".join(
             [
                 f"({{targetHits:{target_hits_per_query_tensor}}}nearestNeighbor(embedding,rq{i}))"
-                for i in range(len(binary_query_embeddings))
+                for i in range(len(nn_query_dict))
             ]
         )
         return nn, nn_query_dict
@@ -387,6 +403,7 @@ class VespaQueryClient:
         hits: int = 3,
         timeout: str = "10s",
         sim_map: bool = False,
+        visual_only: bool = False,
         **kwargs,
     ) -> dict:
         """
@@ -403,7 +420,17 @@ class VespaQueryClient:
         Returns:
             dict: The formatted query results.
         """
+        if visual_only:
+            # Further optimize parameters for visual search
+            timeout = "300s"  # Match the HTTP client timeout
+            hnsw_explore_additional_hits = 100  # Keep reduced exploration
+            target_hits_per_query_tensor = 20  # Keep reduced target hits
+            ranking = f"{ranking}_visual"
+
         async with self.app.asyncio(connections=1) as session:
+            # Configure longer timeout for the session
+            session.httpx_client._timeout = httpx.Timeout(timeout=300.0)  # 5 minutes
+
             float_query_embedding = self.format_q_embs(q_emb)
             binary_query_embeddings = self.float_to_binary_embedding(
                 float_query_embedding
@@ -418,25 +445,39 @@ class VespaQueryClient:
                 binary_query_embeddings, target_hits_per_query_tensor
             )
             query_tensors.update(nn_query_dict)
-            response: VespaQueryResponse = await session.query(
-                body={
-                    **query_tensors,
-                    "presentation.timing": True,
-                    "yql": (
-                        f"select {self.get_fields(sim_map=sim_map)} from {self.VESPA_SCHEMA_NAME} where {nn_string} or userQuery()"
-                    ),
-                    "ranking.profile": self.get_rank_profile(
-                        ranking=ranking, sim_map=sim_map
-                    ),
-                    "timeout": timeout,
-                    "hits": hits,
-                    "query": query,
-                    "hnsw.exploreAdditionalHits": hnsw_explore_additional_hits,
-                    "ranking.rerankCount": 100,
-                    **kwargs,
-                },
-            )
-            assert response.is_successful(), response.json
+
+            # Prepare query body with optimized parameters
+            query_body = {
+                **query_tensors,
+                "presentation.timing": True,
+                "yql": (
+                    f"select {self.get_fields(sim_map=sim_map)} from {self.VESPA_SCHEMA_NAME} where {nn_string}"
+                    + (" or userQuery()" if not visual_only else "")
+                ),
+                "ranking.profile": self.get_rank_profile(
+                    ranking=ranking, sim_map=sim_map
+                ),
+                "timeout": timeout,
+                "hits": hits,
+                "hnsw.exploreAdditionalHits": hnsw_explore_additional_hits,
+                "ranking.rerankCount": 25 if visual_only else 100,  # Further reduce rerank count
+                "ranking.matchPhase.maxHits": 100,  # Limit match phase hits
+                "ranking.softtimeout.enable": True,  # Enable soft timeout
+                **kwargs,
+            }
+
+            # Only add query parameter if not visual_only
+            if not visual_only:
+                query_body["query"] = query
+
+            try:
+                response: VespaQueryResponse = await session.query(body=query_body)
+                assert response.is_successful(), response.json
+            except Exception as e:
+                self.logger.error(f"Query failed: {str(e)}")
+                if hasattr(e, 'response') and hasattr(e.response, 'json'):
+                    self.logger.error(f"Response JSON: {e.response.json()}")
+                raise
         return self.format_query_results(query, response)
 
     async def keepalive(self) -> bool:

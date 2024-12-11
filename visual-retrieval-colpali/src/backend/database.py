@@ -6,10 +6,11 @@ from uuid import UUID
 import os
 from typing import Optional, AsyncGenerator
 from contextlib import asynccontextmanager
-from .models import User, UserDocument, UserSettings, RankerType
+from .models import User, UserDocument, UserSettings, RankerType, ImageQuery
 from .base import Base
 import logging
 from pathlib import Path
+import torch
 
 DATABASE_URL = (
     f"postgresql+asyncpg://"
@@ -682,6 +683,38 @@ Only return JSON. Don't return any extra explanation text."""
             quantized
         }
     }
+    rank-profile colpali_visual inherits colpali {
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+            keep-rank-count: 100
+        }
+        second-phase {
+            rerank-count: 25
+            expression {
+                max_sim
+            }
+        }
+        match-features {
+            distance(embedding)
+        }
+        rank-properties {
+            rankOnlyMatchedTerms: true
+            termwiseLimit: true
+            secondPhaseRerank: true
+            matchPhaseLimit: 100
+            maxHits: 100
+        }
+        constants {
+            maxTermsPerQuery: 64
+        }
+    }
+    rank-profile colpali_visual_sim inherits colpali_visual {
+        summary-features {
+            quantized
+        }
+    }
     document-summary default {
         summary text {
             bolding: on
@@ -697,3 +730,35 @@ Only return JSON. Don't return any extra explanation text."""
         from-disk
     }
 }"""
+
+    async def store_image_query(self, query_id: str, embeddings: torch.Tensor, text: str, is_visual_only: bool) -> str:
+        logger = logging.getLogger("vespa_app")
+        logger.debug(f"Storing image query with ID {query_id}")
+
+        try:
+            # Convert embeddings tensor to numpy array and then to list
+            embeddings_list = embeddings.detach().cpu().numpy().tolist()
+
+            async with self.get_session() as session:
+                # Create new ImageQuery record
+                image_query = ImageQuery(
+                    query_id=query_id,
+                    embeddings=embeddings_list,
+                    text=text,
+                    is_visual_only=is_visual_only
+                )
+                session.add(image_query)
+                await session.commit()
+                logger.debug(f"Successfully stored image query with ID {query_id}")
+                return query_id
+
+        except Exception as e:
+            logger.error(f"Error storing image query: {str(e)}")
+            raise
+
+    async def get_image_query(self, query_id: str) -> Optional[ImageQuery]:
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(ImageQuery).where(ImageQuery.query_id == query_id)
+            )
+            return result.scalar_one_or_none()

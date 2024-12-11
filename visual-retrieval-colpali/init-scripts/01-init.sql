@@ -33,4 +33,13 @@ CREATE TABLE user_settings (
     FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );
 
+CREATE TABLE image_queries (
+    query_id VARCHAR(255) PRIMARY KEY,
+    embeddings FLOAT[] NOT NULL,
+    text TEXT,
+    is_visual_only BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX idx_user_document_user_id ON user_document(user_id);
+CREATE INDEX idx_image_queries_created_at ON image_queries(created_at);
