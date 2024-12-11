@@ -121,6 +121,7 @@ thread_pool = ThreadPoolExecutor()
 app.deployed = False
 
 def configure_static_routes(app):
+    os.makedirs("storage", exist_ok=True)
     app.mount("/storage", StaticFiles(directory="storage"), name="storage")
 
 configure_static_routes(app)
