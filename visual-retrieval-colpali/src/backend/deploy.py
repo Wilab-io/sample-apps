@@ -70,6 +70,7 @@ async def deploy_application_step_1(settings: UserSettings):
     if not all([
         settings.tenant_name,
         settings.app_name,
+        settings.instance_name,
         settings.vespa_token_id,
         settings.vespa_token_value,
         settings.gemini_token
@@ -78,6 +79,7 @@ async def deploy_application_step_1(settings: UserSettings):
 
     VESPA_TENANT_NAME = settings.tenant_name
     VESPA_APPLICATION_NAME = settings.app_name
+    VESPA_INSTANCE_NAME = settings.instance_name
 
     logger.info(f"Deploying application {VESPA_APPLICATION_NAME} to tenant {VESPA_TENANT_NAME}")
 
@@ -86,8 +88,6 @@ async def deploy_application_step_1(settings: UserSettings):
     app_dir = os.path.join(parent_dir, "application")
 
     copy_api_key_file(app_dir, VESPA_TENANT_NAME)
-
-    logger.info(f"Running vespa commands on the application directory: {app_dir}")
 
     current_dir = os.getcwd()
 
@@ -99,12 +99,12 @@ async def deploy_application_step_1(settings: UserSettings):
         app_config = f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}"
         subprocess.run(["vespa", "config", "set", "application", app_config], check=True)
 
-        subprocess.run(["vespa", "auth", "cert", "-f"], check=True)
+        subprocess.run(["vespa", "auth", "cert", "-f", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"], check=True)
 
         def run_auth_login():
             master, slave = pty.openpty()
             process = subprocess.Popen(
-                ["vespa", "auth", "login"],
+                ["vespa", "auth", "login", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"],
                 stdin=slave,
                 stdout=slave,
                 stderr=slave,
@@ -162,7 +162,7 @@ async def deploy_application_step_1(settings: UserSettings):
         logger.info(f"Authentication URL found: {auth_url}")
 
         # Load certificate files
-        cert_dir = os.path.expanduser(f"~/.vespa/{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.default")
+        cert_dir = os.path.expanduser(f"~/.vespa/{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}")
         logger.debug(f"Looking for certificates in: {cert_dir}")
 
         private_key_path = os.path.join(cert_dir, "data-plane-private-key.pem")
@@ -206,7 +206,9 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
     load_dotenv()
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+    VESPA_TENANT_NAME = settings.tenant_name
     VESPA_APPLICATION_NAME = settings.app_name
+    VESPA_INSTANCE_NAME = settings.instance_name
     VESPA_SCHEMA_NAME = "pdf_page"
     VESPA_TOKEN_ID_WRITE = settings.vespa_token_id
     GEMINI_API_KEY = settings.gemini_token
@@ -312,7 +314,7 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
             os.chdir(app_dir)
 
             process = subprocess.Popen(
-                ["vespa", "deploy", "--wait", "500"],
+                ["vespa", "deploy", "--wait", "500", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True
@@ -481,7 +483,7 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
             # Change to application directory
             os.chdir(app_dir)
 
-            subprocess.run(["vespa", "feed", "vespa_feed.json", "--progress", "5"], check=True)
+            subprocess.run(["vespa", "feed", "vespa_feed.json", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"], check=True)
 
             logger.info(f"Feeding completed successfully!")
         finally:
@@ -611,13 +613,23 @@ def with_quantized_similarity(rank_profile: RankProfile) -> RankProfile:
         summary_features=["quantized"],
     )
 
-def copy_api_key_file(app_dir, VESPA_TENANT_NAME):
-    api_key_src = os.path.join(app_dir, f"{VESPA_TENANT_NAME}.api-key.pem")
+def copy_api_key_file(app_dir, tenant_name):
+    # Find any .pem file in the source directory
+    api_key_src = next((f for f in os.listdir(app_dir) if f.endswith('.pem')), None)
+    if api_key_src:
+        api_key_src = os.path.join(app_dir, api_key_src)
+    else:
+        raise FileNotFoundError("No .pem file found in application directory")
+
     api_key_dest = os.path.expanduser("~/.vespa")
     os.makedirs(api_key_dest, exist_ok=True)
+
+    dest_filename = f"{tenant_name}.api-key.pem"
+    dest_path = os.path.join(api_key_dest, dest_filename)
+
     if os.path.exists(api_key_src):
         import shutil
-        shutil.copy2(api_key_src, api_key_dest)
-        logger.info(f"Copied API key from {api_key_src} to {api_key_dest}")
+        shutil.copy2(api_key_src, dest_path)
+        logger.info(f"Copied API key from {api_key_src} to {dest_path}")
     else:
         logger.warning(f"API key file not found at {api_key_src}")
