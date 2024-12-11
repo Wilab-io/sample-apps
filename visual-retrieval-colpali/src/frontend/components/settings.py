@@ -7,18 +7,21 @@ def TabButton(text: str, value: str, active_tab: str):
     return Div(
         text,
         cls=f"""
-            px-4 py-2 rounded-[10px]
+            px-4 py-2 rounded-[10px] cursor-pointer
             {
                 'bg-white dark:bg-gray-900 text-black dark:text-white' if is_active
                 else 'text-gray-500 dark:text-gray-400 opacity-50'
             }
-            {'cursor-default'}  # Never show pointer cursor since tabs aren't clickable
-        """
+        """,
+        **{
+            "hx-get": f"/settings/content?tab={value}",
+            "hx-push-url": f"/settings?tab={value}",
+            "hx-target": "#settings-content",
+            "hx-swap": "outerHTML"
+        }
     )
 
 def TabButtons(active_tab: str, username: str = None, appConfigured: bool = False):
-    print(f"appConfigured: {appConfigured}")
-
     return Div(
         Div(
             TabButton("Demo questions", "demo-questions", active_tab),
