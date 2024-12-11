@@ -16,10 +16,6 @@ from fasthtml.components import (
     A,
     Script,
     Button,
-    Label,
-    RadioGroup,
-    RadioGroupItem,
-    Separator,
     Ul,
     Li,
     Strong,
@@ -27,7 +23,7 @@ from fasthtml.components import (
 )
 from fasthtml.xtend import A, Script
 from lucide_fasthtml import Lucide
-from shad4fast import Badge, Button, Input, Label, RadioGroup, RadioGroupItem, Separator
+from shad4fast import Badge, Button, Input, Separator
 
 # JavaScript to check the input value and enable/disable the search button and radio buttons
 check_input_script = Script(

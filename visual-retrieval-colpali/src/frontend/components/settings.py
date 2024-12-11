@@ -1,4 +1,4 @@
-from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea, Link
+from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea
 from lucide_fasthtml import Lucide
 from backend.models import UserSettings
 
@@ -28,19 +28,33 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
             TabButton("Prompt", "prompt", active_tab) if username == "admin" else None,
             cls="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-[10px]",
         ),
-        Button(
-            "Deploy",
-            cls="bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
-            id="deploy-button",
-            **{
-                "hx-post": "/api/deploy-part-1",
-                "hx-swap": "none"
-            }
-        ) if appConfigured else Button(
-            "Deploy",
-            cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]",
-            id="deploy-button",
-            disabled=not appConfigured,
+        Div(
+            Button(
+                "Deploy",
+                cls="bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
+                id="deploy-button",
+                **{
+                    "hx-post": "/api/deploy-part-1",
+                    "hx-swap": "none"
+                }
+            ) if appConfigured else Button(
+                "Deploy",
+                cls="bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px]",
+                id="deploy-button",
+                disabled=not appConfigured,
+            ),
+            Div(
+                Lucide(
+                    "info",
+                    cls="size-5 cursor-pointer ml-6 dark:brightness-0 dark:invert"
+                ),
+                P(
+                    "All required settings must be set\nand at least one document must be\nuploaded before deploying the application.",
+                    cls="absolute invisible group-hover:visible bg-white dark:bg-gray-900 text-black dark:text-white p-3 rounded-[10px] text-sm -mt-16 ml-2 shadow-sm w-[400px] z-50 whitespace-pre-line"
+                ),
+                cls="relative inline-block group"
+            ),
+            cls="flex items-center"
         ),
         cls="flex justify-between items-center mb-8 gap-4",
         id="tab-buttons"
@@ -221,41 +235,6 @@ def ConnectionSettings(settings: UserSettings = None):
                 # Content wrapper with max-width to limit input width
                 Div(
                     Div(
-                        H2("Vespa.ai endpoint connection", cls="text-lg font-semibold mb-4"),
-                        Div(
-                            Label(
-                                "Vespa.ai host ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-host",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_host if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_host",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
-                        Div(
-                            Label(
-                                "Vespa.ai port ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-port",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_port if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_port",
-                                type="number",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
-                        cls="mb-8"
-                    ),
-                    Div(
                         H2("Tokens", cls="text-lg font-semibold mb-4"),
                         Div(
                             Label(
@@ -303,18 +282,6 @@ def ConnectionSettings(settings: UserSettings = None):
                             cls="space-y-2 mb-4"
                         ),
                         cls="mb-8"
-                    ),
-                    Div(
-                        H2("Vespa Cloud endpoint", cls="text-lg font-semibold mb-4"),
-                        Div(
-                            Label("Endpoint URL", htmlFor="vespa-cloud-endpoint", cls="text-sm font-medium"),
-                            Input(
-                                value=settings.vespa_cloud_endpoint if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_cloud_endpoint"
-                            ),
-                            cls="space-y-2"
-                        ),
                     ),
                     cls="max-w-[50%]"
                 ),
@@ -399,6 +366,21 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 required=True,
                                 pattern="[a-z0-9]+",
                                 title="Only lowercase letters and numbers allowed, no spaces or special characters, start with a letter"
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "Instance name ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="instance-name",
+                                cls="text-sm font-medium"
+                            ),
+                            Input(
+                                value=settings.instance_name if settings else '',
+                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                name="instance_name",
+                                required=True,
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -504,7 +486,7 @@ def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, 
         H1("Settings", cls="text-4xl font-bold mb-8 text-center"),
         Div(
             TabContent(active_tab, settings, username, appConfigured),
-            cls="w-full max-w-screen-xl mx-auto"
+            cls="w-full max-w-4xl mx-auto"
         ),
         cls="container mx-auto px-4 py-8 w-full min-h-0"
     )

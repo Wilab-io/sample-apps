@@ -736,6 +736,14 @@ body {
   top: 0px;
 }
 
+.bottom-8 {
+  bottom: 2rem;
+}
+
+.left-1\/2 {
+  left: 50%;
+}
+
 .z-40 {
   z-index: 40;
 }
@@ -840,6 +848,10 @@ body {
   margin-top: 8vh;
 }
 
+.-mt-16 {
+  margin-top: -4rem;
+}
+
 .block {
   display: block;
 }
@@ -935,8 +947,16 @@ body {
   width: 100%;
 }
 
+.w-\[400px\] {
+  width: 400px;
+}
+
 .min-w-\[400px\] {
   min-width: 400px;
+}
+
+.min-w-\[800px\] {
+  min-width: 800px;
 }
 
 .max-w-4xl {
@@ -965,6 +985,16 @@ body {
 
 .flex-grow {
   flex-grow: 1;
+}
+
+.-translate-x-1\/2 {
+  --tw-translate-x: -50%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+.-translate-y-full {
+  --tw-translate-y: -100%;
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
 }
 
 @keyframes pulse {
@@ -1150,6 +1180,10 @@ body {
 
 .overflow-hidden {
   overflow: hidden;
+}
+
+.whitespace-pre-line {
+  white-space: pre-line;
 }
 
 .rounded-\[10px\] {

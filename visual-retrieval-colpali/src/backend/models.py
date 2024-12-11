@@ -1,9 +1,8 @@
-from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Integer, Text, Float, Boolean
+from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
 import uuid
-from typing import Optional
 from datetime import datetime
 import enum
 
@@ -41,13 +40,12 @@ class UserSettings(Base):
         nullable=False,
         default=RankerType.colpali
     )
-    vespa_host = Column(String, nullable=True)
-    vespa_port = Column(Integer, nullable=True)
     vespa_token_id = Column(String, nullable=True)
     vespa_token_value = Column(String, nullable=True)
     gemini_token = Column(String, nullable=True)
     vespa_cloud_endpoint = Column(String, nullable=True)
     tenant_name = Column(String, nullable=True)
     app_name = Column(String, nullable=True)
+    instance_name = Column(String, nullable=True)
     schema = Column(Text, nullable=True)
     prompt = Column(Text, nullable=True)

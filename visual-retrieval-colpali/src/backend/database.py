@@ -99,7 +99,7 @@ class Database:
                 raise ValueError(f"Unsupported file type: {file_ext}")
 
             # Convert PNG to JPG before database operations
-            if file_ext != ".jpg":
+            if file_ext != ".jpg" and file_ext != ".pdf":
                 from PIL import Image
                 from io import BytesIO
                 with BytesIO(file_content) as bio:
@@ -157,8 +157,7 @@ class Database:
                     logger.warning(f"Document {document_id} not found in database")
                     return
 
-                storage_dir = Path("storage/user_documents")
-                file_path = storage_dir / str(document.user_id) / f"{document_id}{document.file_extension}"
+                file_path = STORAGE_DIR / str(document.user_id) / f"{document_id}{document.file_extension}"
                 if file_path.exists():
                     file_path.unlink()
                     logger.info(f"Deleted file {file_path}")
@@ -240,13 +239,12 @@ class Database:
             return False
 
         required_settings = [
-            settings.vespa_host,
-            settings.vespa_port,
             settings.vespa_token_id,
             settings.vespa_token_value,
             settings.gemini_token,
             settings.tenant_name,
             settings.app_name,
+            settings.instance_name,
             settings.prompt
         ]
 

@@ -11,7 +11,7 @@ function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
     const rankerInputs = document.querySelectorAll('input[name="ranker"]');
-    const connectionInputs = document.querySelectorAll('input[name="vespa_host"], input[name="vespa_port"], input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"], input[name="vespa_cloud_endpoint"]');
+    const connectionInputs = document.querySelectorAll('input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"]');
     const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"], textarea[name="schema"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
@@ -193,27 +193,22 @@ function updateRankerSaveButtonState() {
 }
 
 function updateConnectionSaveButtonState() {
-    const vespaHost = document.querySelector('input[name="vespa_host"]');
-    const vespaPort = document.querySelector('input[name="vespa_port"]');
     const vespaTokenID = document.querySelector('input[name="vespa_token_id"]');
     const vespaTokenValue = document.querySelector('input[name="vespa_token_value"]');
     const geminiToken = document.querySelector('input[name="gemini_token"]');
-    const vespaCloudEndpoint = document.querySelector('input[name="vespa_cloud_endpoint"]');
 
     const enabledButton = document.querySelector('#save-connection');
     const disabledButton = document.querySelector('#save-connection-disabled');
     const unsavedChanges = document.getElementById('connection-unsaved-changes');
 
-  if (!vespaHost || !vespaPort || !vespaTokenID || !vespaTokenValue || !geminiToken) return;
+  if (!vespaTokenID || !vespaTokenValue || !geminiToken) return;
 
-    const isValid = vespaHost.value.trim() !== '' &&
-                    vespaPort.value.trim() !== '' &&
-                    vespaTokenID.value.trim() !== '' &&
+    const isValid = vespaTokenID.value.trim() !== '' &&
                     vespaTokenValue.value.trim() !== '' &&
                     geminiToken.value.trim() !== '';
 
     // Check if any field has changed from its original value
-    const hasChanges = [vespaHost, vespaPort, vespaTokenID, vespaTokenValue, geminiToken, vespaCloudEndpoint].some(input => {
+    const hasChanges = [vespaTokenID, vespaTokenValue, geminiToken].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
     });
@@ -237,20 +232,21 @@ function updateConnectionSaveButtonState() {
 function updateApplicationPackageSaveButtonState() {
     const tenantName = document.querySelector('input[name="tenant_name"]');
     const appName = document.querySelector('input[name="app_name"]');
+    const instanceName = document.querySelector('input[name="instance_name"]');
     const schema = document.querySelector('textarea[name="schema"]');
 
     const enabledButton = document.querySelector('#save-application-package');
     const disabledButton = document.querySelector('#save-application-package-disabled');
     const unsavedChanges = document.getElementById('application-package-unsaved-changes');
 
-    if (!tenantName || !appName || !schema) return;
+    if (!tenantName || !appName || !instanceName || !schema) return;
 
     const isValid = tenantName.value.trim() !== '' &&
                    appName.value.trim() !== '' &&
                    schema.value.trim() !== '';
 
     // Check if any field has changed from its original value
-    const hasChanges = [tenantName, appName, schema].some(input => {
+    const hasChanges = [tenantName, appName, instanceName, schema].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
     });
