@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.orm import sessionmaker as sessionMaker
 from sqlalchemy.schema import CreateTable
 from sqlalchemy import select, delete
 from uuid import UUID
@@ -22,7 +22,7 @@ DATABASE_URL = (
 
 # Create async engine
 engine = create_async_engine(DATABASE_URL, echo=False)
-async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = sessionMaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 STORAGE_DIR = Path("storage/user_documents")
 
@@ -80,6 +80,14 @@ class Database:
             logger.debug(f"Database: Found {len(documents)} documents")
             return documents
 
+    async def get_user_document_by_id(self, document_id: str):
+        """Get a document by ID"""
+        async with self.get_session() as session:
+            result = await session.execute(
+                select(UserDocument).where(UserDocument.document_id == document_id)
+            )
+            return result.scalar_one_or_none()
+
     async def add_user_document(self, user_id: str, document_name: str, file_content: bytes):
         """Add a new document to both filesystem and database"""
         logger = logging.getLogger("vespa_app")
@@ -89,6 +97,18 @@ class Database:
             file_ext = Path(document_name).suffix.lower()
             if file_ext not in ['.pdf', '.png', '.jpg', '.jpeg']:
                 raise ValueError(f"Unsupported file type: {file_ext}")
+
+            # Convert PNG to JPG before database operations
+            if file_ext != ".jpg" and file_ext != ".pdf":
+                from PIL import Image
+                from io import BytesIO
+                with BytesIO(file_content) as bio:
+                    im = Image.open(bio)
+                    rgb_im = im.convert('RGB')
+                    output_bio = BytesIO()
+                    rgb_im.save(output_bio, format='JPEG')
+                    file_content = output_bio.getvalue()
+                file_ext = '.jpg'
 
             async with self.get_session() as session:
                 new_document = UserDocument(
@@ -112,7 +132,13 @@ class Database:
         except Exception as e:
             logger.error(f"Error adding document {document_name}: {str(e)}")
             if 'new_document' in locals():
-                await self.delete_document(new_document.document_id)
+                async with self.get_session() as session:
+                    result = await session.execute(
+                        select(UserDocument).where(UserDocument.document_id == new_document.document_id)
+                    )
+                    document = result.scalar_one_or_none()
+                    if document:
+                        await self.delete_document(document.document_id)
             raise
 
     async def delete_document(self, document_id: str):
@@ -131,8 +157,7 @@ class Database:
                     logger.warning(f"Document {document_id} not found in database")
                     return
 
-                storage_dir = Path("storage/user_documents")
-                file_path = storage_dir / str(document.user_id) / f"{document_id}{document.file_extension}"
+                file_path = STORAGE_DIR / str(document.user_id) / f"{document_id}{document.file_extension}"
                 if file_path.exists():
                     file_path.unlink()
                     logger.info(f"Deleted file {file_path}")
@@ -149,34 +174,22 @@ class Database:
 
     async def get_demo_questions(self, user_id: str) -> list[str]:
         """Get demo questions for a user"""
-        async with self.get_session() as session:
-            result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == UUID(user_id))
-            )
-            settings = result.scalar_one_or_none()
-            return settings.demo_questions if settings else []
-
-    async def update_demo_questions(self, user_id: str, questions: list[str]):
-        """Update demo questions for a user"""
-        async with self.get_session() as session:
-            result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == UUID(user_id))
-            )
-            settings = result.scalar_one_or_none()
-            if settings:
-                settings.demo_questions = questions
-            else:
-                settings = UserSettings(
-                    user_id=UUID(user_id),
-                    demo_questions=questions
-                )
-                session.add(settings)
-            await session.commit()
+        settings = await self.get_user_settings(user_id)
+        return settings.demo_questions if settings else []
 
     async def get_user_settings(self, user_id: str) -> UserSettings:
         """Get user settings, creating default settings if they don't exist"""
         async with self.get_session() as session:
             user_id_uuid = UUID(user_id)
+
+            # First check if user exists
+            user_result = await session.execute(
+                select(User).where(User.user_id == user_id_uuid)
+            )
+            user = user_result.scalar_one_or_none()
+
+            if not user:
+                return None
 
             result = await session.execute(
                 select(UserSettings).where(UserSettings.user_id == user_id_uuid)
@@ -187,36 +200,16 @@ class Database:
                 settings = UserSettings(
                     user_id=user_id_uuid,
                     ranker=RankerType.colpali,
-                    prompt=self.get_default_prompt()
+                    prompt=self.get_default_prompt(),
+                    schema=self.get_default_schema()
                 )
                 session.add(settings)
                 await session.commit()
 
             return settings
 
-    async def update_user_ranker(self, user_id: str, ranker: str) -> None:
-        """Update user's ranker setting"""
-        async with self.get_session() as session:
-            user_id_uuid = UUID(user_id)
-
-            result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
-            )
-            settings = result.scalar_one_or_none()
-
-            if settings:
-                settings.ranker = RankerType[ranker]
-            else:
-                settings = UserSettings(
-                    user_id=user_id_uuid,
-                    ranker=RankerType[ranker]
-                )
-                session.add(settings)
-
-            await session.commit()
-
-    async def update_connection_settings(self, user_id: str, settings: dict) -> None:
-        """Update connection settings for a user"""
+    async def update_settings(self, user_id: str, settings: dict) -> None:
+        """Update settings for a user"""
         async with self.get_session() as session:
             user_id_uuid = UUID(user_id)
 
@@ -237,26 +230,27 @@ class Database:
 
             await session.commit()
 
-    async def update_prompt_settings(self, user_id: str, prompt: str) -> None:
-        """Update prompt settings for a user"""
-        async with self.get_session() as session:
-            user_id_uuid = UUID(user_id)
+    async def is_application_configured(self, user_id: str) -> bool:
+        documents = await self.get_user_documents(UUID(user_id))
+        has_documents = len(documents) > 0
 
-            result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == user_id_uuid)
-            )
-            user_settings = result.scalar_one_or_none()
+        settings = await self.get_user_settings(user_id)
+        if not settings:
+            return False
 
-            if user_settings:
-                user_settings.prompt = prompt
-            else:
-                user_settings = UserSettings(
-                    user_id=user_id_uuid,
-                    prompt=prompt
-                )
-                session.add(user_settings)
+        required_settings = [
+            settings.vespa_token_id,
+            settings.vespa_token_value,
+            settings.gemini_token,
+            settings.tenant_name,
+            settings.app_name,
+            settings.instance_name,
+            settings.prompt
+        ]
 
-            await session.commit()
+        has_required_settings = all(setting is not None for setting in required_settings)
+
+        return has_documents and has_required_settings
 
     @staticmethod
     def get_default_prompt() -> str:
@@ -290,3 +284,416 @@ If there are no relevant visual elements, provide an empty string for the visual
 Here is the document image to analyze:
 Generate the queries based on this image and provide the response in the specified JSON format.
 Only return JSON. Don't return any extra explanation text."""
+
+    @staticmethod
+    def get_default_schema() -> str:
+        return """schema pdf_page {
+    document pdf_page {
+        field id type string {
+            indexing: summary | index
+            match {
+                word
+            }
+        }
+        field url type string {
+            indexing: summary | index
+        }
+        field year type int {
+            indexing: summary | attribute
+        }
+        field title type string {
+            indexing: summary | index
+            index: enable-bm25
+            match {
+                text
+            }
+        }
+        field page_number type int {
+            indexing: summary | attribute
+        }
+        field blur_image type raw {
+            indexing: summary
+        }
+        field full_image type raw {
+            indexing: summary
+        }
+        field text type string {
+            indexing: summary | index
+            index: enable-bm25
+            match {
+                text
+            }
+        }
+        field embedding type tensor<int8>(patch{}, v[16]) {
+            indexing: attribute | index
+            attribute {
+                distance-metric: hamming
+            }
+            index {
+                hnsw {
+                    max-links-per-node: 32
+                    neighbors-to-explore-at-insert: 400
+                }
+            }
+        }
+        field questions type array<string> {
+            indexing: summary | attribute
+            summary: matched-elements-only
+        }
+        field queries type array<string> {
+            indexing: summary | attribute
+            summary: matched-elements-only
+        }
+    }
+    fieldset default {
+        fields: title, text
+    }
+    rank-profile bm25 {
+        inputs {
+            query(qt) tensor<float>(querytoken{}, v[128])
+
+        }
+        function similarities() {
+            expression {
+
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
+
+            }
+        }
+        function normalized() {
+            expression {
+
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        first-phase {
+            expression {
+                bm25(title) + bm25(text)
+            }
+        }
+    }
+    rank-profile bm25_sim inherits bm25 {
+        first-phase {
+            expression {
+                bm25(title) + bm25(text)
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    rank-profile colpali {
+        inputs {
+            query(rq0) tensor<int8>(v[16])
+            query(rq1) tensor<int8>(v[16])
+            query(rq2) tensor<int8>(v[16])
+            query(rq3) tensor<int8>(v[16])
+            query(rq4) tensor<int8>(v[16])
+            query(rq5) tensor<int8>(v[16])
+            query(rq6) tensor<int8>(v[16])
+            query(rq7) tensor<int8>(v[16])
+            query(rq8) tensor<int8>(v[16])
+            query(rq9) tensor<int8>(v[16])
+            query(rq10) tensor<int8>(v[16])
+            query(rq11) tensor<int8>(v[16])
+            query(rq12) tensor<int8>(v[16])
+            query(rq13) tensor<int8>(v[16])
+            query(rq14) tensor<int8>(v[16])
+            query(rq15) tensor<int8>(v[16])
+            query(rq16) tensor<int8>(v[16])
+            query(rq17) tensor<int8>(v[16])
+            query(rq18) tensor<int8>(v[16])
+            query(rq19) tensor<int8>(v[16])
+            query(rq20) tensor<int8>(v[16])
+            query(rq21) tensor<int8>(v[16])
+            query(rq22) tensor<int8>(v[16])
+            query(rq23) tensor<int8>(v[16])
+            query(rq24) tensor<int8>(v[16])
+            query(rq25) tensor<int8>(v[16])
+            query(rq26) tensor<int8>(v[16])
+            query(rq27) tensor<int8>(v[16])
+            query(rq28) tensor<int8>(v[16])
+            query(rq29) tensor<int8>(v[16])
+            query(rq30) tensor<int8>(v[16])
+            query(rq31) tensor<int8>(v[16])
+            query(rq32) tensor<int8>(v[16])
+            query(rq33) tensor<int8>(v[16])
+            query(rq34) tensor<int8>(v[16])
+            query(rq35) tensor<int8>(v[16])
+            query(rq36) tensor<int8>(v[16])
+            query(rq37) tensor<int8>(v[16])
+            query(rq38) tensor<int8>(v[16])
+            query(rq39) tensor<int8>(v[16])
+            query(rq40) tensor<int8>(v[16])
+            query(rq41) tensor<int8>(v[16])
+            query(rq42) tensor<int8>(v[16])
+            query(rq43) tensor<int8>(v[16])
+            query(rq44) tensor<int8>(v[16])
+            query(rq45) tensor<int8>(v[16])
+            query(rq46) tensor<int8>(v[16])
+            query(rq47) tensor<int8>(v[16])
+            query(rq48) tensor<int8>(v[16])
+            query(rq49) tensor<int8>(v[16])
+            query(rq50) tensor<int8>(v[16])
+            query(rq51) tensor<int8>(v[16])
+            query(rq52) tensor<int8>(v[16])
+            query(rq53) tensor<int8>(v[16])
+            query(rq54) tensor<int8>(v[16])
+            query(rq55) tensor<int8>(v[16])
+            query(rq56) tensor<int8>(v[16])
+            query(rq57) tensor<int8>(v[16])
+            query(rq58) tensor<int8>(v[16])
+            query(rq59) tensor<int8>(v[16])
+            query(rq60) tensor<int8>(v[16])
+            query(rq61) tensor<int8>(v[16])
+            query(rq62) tensor<int8>(v[16])
+            query(rq63) tensor<int8>(v[16])
+            query(qt) tensor<float>(querytoken{}, v[128])
+            query(qtb) tensor<int8>(querytoken{}, v[16])
+
+        }
+        function similarities() {
+            expression {
+
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
+
+            }
+        }
+        function normalized() {
+            expression {
+
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        function max_sim() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        sum(
+                                            query(qt) * unpack_bits(attribute(embedding)), v
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        function max_sim_binary() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        1 / (1 + sum(
+                                            hamming(query(qtb), attribute(embedding)), v)
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        second-phase {
+            rerank-count: 10
+            expression {
+                max_sim
+            }
+        }
+    }
+    rank-profile colpali_sim inherits colpali {
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    rank-profile hybrid {
+        inputs {
+            query(rq0) tensor<int8>(v[16])
+            query(rq1) tensor<int8>(v[16])
+            query(rq2) tensor<int8>(v[16])
+            query(rq3) tensor<int8>(v[16])
+            query(rq4) tensor<int8>(v[16])
+            query(rq5) tensor<int8>(v[16])
+            query(rq6) tensor<int8>(v[16])
+            query(rq7) tensor<int8>(v[16])
+            query(rq8) tensor<int8>(v[16])
+            query(rq9) tensor<int8>(v[16])
+            query(rq10) tensor<int8>(v[16])
+            query(rq11) tensor<int8>(v[16])
+            query(rq12) tensor<int8>(v[16])
+            query(rq13) tensor<int8>(v[16])
+            query(rq14) tensor<int8>(v[16])
+            query(rq15) tensor<int8>(v[16])
+            query(rq16) tensor<int8>(v[16])
+            query(rq17) tensor<int8>(v[16])
+            query(rq18) tensor<int8>(v[16])
+            query(rq19) tensor<int8>(v[16])
+            query(rq20) tensor<int8>(v[16])
+            query(rq21) tensor<int8>(v[16])
+            query(rq22) tensor<int8>(v[16])
+            query(rq23) tensor<int8>(v[16])
+            query(rq24) tensor<int8>(v[16])
+            query(rq25) tensor<int8>(v[16])
+            query(rq26) tensor<int8>(v[16])
+            query(rq27) tensor<int8>(v[16])
+            query(rq28) tensor<int8>(v[16])
+            query(rq29) tensor<int8>(v[16])
+            query(rq30) tensor<int8>(v[16])
+            query(rq31) tensor<int8>(v[16])
+            query(rq32) tensor<int8>(v[16])
+            query(rq33) tensor<int8>(v[16])
+            query(rq34) tensor<int8>(v[16])
+            query(rq35) tensor<int8>(v[16])
+            query(rq36) tensor<int8>(v[16])
+            query(rq37) tensor<int8>(v[16])
+            query(rq38) tensor<int8>(v[16])
+            query(rq39) tensor<int8>(v[16])
+            query(rq40) tensor<int8>(v[16])
+            query(rq41) tensor<int8>(v[16])
+            query(rq42) tensor<int8>(v[16])
+            query(rq43) tensor<int8>(v[16])
+            query(rq44) tensor<int8>(v[16])
+            query(rq45) tensor<int8>(v[16])
+            query(rq46) tensor<int8>(v[16])
+            query(rq47) tensor<int8>(v[16])
+            query(rq48) tensor<int8>(v[16])
+            query(rq49) tensor<int8>(v[16])
+            query(rq50) tensor<int8>(v[16])
+            query(rq51) tensor<int8>(v[16])
+            query(rq52) tensor<int8>(v[16])
+            query(rq53) tensor<int8>(v[16])
+            query(rq54) tensor<int8>(v[16])
+            query(rq55) tensor<int8>(v[16])
+            query(rq56) tensor<int8>(v[16])
+            query(rq57) tensor<int8>(v[16])
+            query(rq58) tensor<int8>(v[16])
+            query(rq59) tensor<int8>(v[16])
+            query(rq60) tensor<int8>(v[16])
+            query(rq61) tensor<int8>(v[16])
+            query(rq62) tensor<int8>(v[16])
+            query(rq63) tensor<int8>(v[16])
+            query(qt) tensor<float>(querytoken{}, v[128])
+            query(qtb) tensor<int8>(querytoken{}, v[16])
+
+        }
+        function similarities() {
+            expression {
+
+                                sum(
+                                    query(qt) * unpack_bits(attribute(embedding)), v
+                                )
+
+            }
+        }
+        function normalized() {
+            expression {
+
+                                (similarities - reduce(similarities, min)) / (reduce((similarities - reduce(similarities, min)), max)) * 2 - 1
+
+            }
+        }
+        function quantized() {
+            expression {
+
+                                cell_cast(normalized * 127.999, int8)
+
+            }
+        }
+        function max_sim() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        sum(
+                                            query(qt) * unpack_bits(attribute(embedding)), v
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        function max_sim_binary() {
+            expression {
+
+                                sum(
+                                    reduce(
+                                        1 / (1 + sum(
+                                            hamming(query(qtb), attribute(embedding)), v)
+                                        ),
+                                        max, patch
+                                    ),
+                                    querytoken
+                                )
+
+            }
+        }
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        second-phase {
+            rerank-count: 10
+            expression {
+                max_sim + 2 * (bm25(text) + bm25(title))
+            }
+        }
+    }
+    rank-profile hybrid_sim inherits hybrid {
+        first-phase {
+            expression {
+                max_sim_binary
+            }
+        }
+        summary-features {
+            quantized
+        }
+    }
+    document-summary default {
+        summary text {
+            bolding: on
+        }
+        summary snippet {
+            source: text
+            dynamic
+        }
+        from-disk
+    }
+    document-summary suggestions {
+        summary questions {}
+        from-disk
+    }
+}"""

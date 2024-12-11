@@ -16,10 +16,6 @@ from fasthtml.components import (
     A,
     Script,
     Button,
-    Label,
-    RadioGroup,
-    RadioGroupItem,
-    Separator,
     Ul,
     Li,
     Strong,
@@ -27,7 +23,7 @@ from fasthtml.components import (
 )
 from fasthtml.xtend import A, Script
 from lucide_fasthtml import Lucide
-from shad4fast import Badge, Button, Input, Label, RadioGroup, RadioGroupItem, Separator
+from shad4fast import Badge, Button, Input, Separator
 
 # JavaScript to check the input value and enable/disable the search button and radio buttons
 check_input_script = Script(
@@ -199,9 +195,12 @@ def ShareButtons():
 
 
 class SearchBox:
-    def __init__(self, query_value: str = "", ranking_value: str = ""):
+    grid_cls = "grid gap-2 p-3 rounded-md border border-input bg-muted w-full ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-input"
+
+    def __init__(self, query_value: str = "", ranking_value: str = "colpali", is_deployed: bool = False):
         self.query_value = query_value
         self.ranking_value = ranking_value
+        self.is_deployed = is_deployed
 
     def __ft__(self):
         return Div(
@@ -209,18 +208,27 @@ class SearchBox:
                 Input(
                     type="search",
                     name="query",
-                    placeholder="Search...",
+                    placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
                     value=self.query_value,
-                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background",
+                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
                     autofocus=True,
+                    disabled=not self.is_deployed
                 ),
                 P(
-                    f"Ranking by: {self.ranking_value.title()}",
+                    f"Ranking by: {self.ranking_value.title()}" if self.is_deployed else "",
                     cls="text-sm text-muted-foreground mt-2"
                 ),
-                cls="w-full max-w-2xl mx-auto",
-                action=f"/search?ranking={self.ranking_value}",
-                method="GET"
+                check_input_script,
+                autocomplete_script,
+                submit_form_on_radio_change,
+                action=f"/search?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
+                method="GET",
+                hx_get=f"/fetch_results?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
+                hx_trigger="load",
+                hx_target="#search-results",
+                hx_swap="outerHTML",
+                hx_indicator="#loading-indicator",
+                cls=self.grid_cls,
             ),
             cls="py-8 w-full"
         )
@@ -274,14 +282,11 @@ def Hero():
     )
 
 
-async def Home(request=None):
-    settings = await request.app.db.get_user_settings(request.session["user_id"])
-    ranker = settings.ranker.value if hasattr(settings.ranker, 'value') else settings.ranker
-
+async def Home(request, ranker: str = "colpali", app_deployed: bool = False):
     return Div(
         Div(
             Hero(),
-            SearchBox(ranking_value=ranker),
+            SearchBox(ranking_value=ranker, is_deployed=app_deployed),
             await SampleQueries(request),
             ShareButtons(),
             cls="grid gap-8 content-start mt-[13vh]",
@@ -407,11 +412,11 @@ def AboutThisDemo():
 
 def Search(request, search_results=[]):
     query_value = request.query_params.get("query", "").strip()
-    ranking_value = request.query_params.get("ranking", "hybrid")
+    ranking_value = request.query_params.get("ranking", "colpali")
     return Div(
         Div(
             Div(
-                SearchBox(query_value=query_value, ranking_value=ranking_value),
+                SearchBox(query_value=query_value, ranking_value=ranking_value, is_deployed=  True),
                 Div(
                     LoadingMessage(),
                     id="search-results",  # This will be replaced by the search results
