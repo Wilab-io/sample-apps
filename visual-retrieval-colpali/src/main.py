@@ -118,6 +118,7 @@ app, rt = fast_app(
 )
 thread_pool = ThreadPoolExecutor()
 app.deployed = False
+app.results_cache = {}  # Initialize the results cache
 
 def configure_static_routes(app):
     os.makedirs("storage", exist_ok=True)
@@ -225,10 +226,6 @@ async def get(request, query: str = "", ranking: str = "colpali"):
     # Show the loading message if a query is provided
     return await Layout(
         Main(Search(request), data_overlayscrollbars_initialize=True, cls="border-t"),
-        Aside(
-            ChatResult(query_id=query_id, query=query),
-            cls="border-t border-l hidden md:block",
-        ),
         request=request
     )  # Show SearchBox and Loading message initially
 
@@ -242,15 +239,12 @@ async def get(session, request, query: str, ranking: str):
     # Get the hash of the query and ranking value
     query_id = generate_query_id(query, ranking)
     logger.info(f"Query id in /fetch_results: {query_id}")
+
     # Run the embedding and query against Vespa app
     start_inference = time.perf_counter()
-    q_embs, idx_to_token = app.sim_map_generator.get_query_embeddings_and_token_map(
-        query
-    )
+    q_embs, idx_to_token = app.sim_map_generator.get_query_embeddings_and_token_map(query)
     end_inference = time.perf_counter()
-    logger.info(
-        f"Inference time for query_id: {query_id} \t {end_inference - start_inference:.2f} seconds"
-    )
+    logger.info(f"Inference time for query_id: {query_id} \t {end_inference - start_inference:.2f} seconds")
 
     start = time.perf_counter()
     # Fetch real search results from Vespa
@@ -261,14 +255,14 @@ async def get(session, request, query: str, ranking: str):
         idx_to_token=idx_to_token,
     )
     end = time.perf_counter()
-    logger.info(
-        f"Search results fetched in {end - start:.2f} seconds. Vespa search time: {result['timing']['searchtime']}"
-    )
+    logger.info(f"Search results fetched in {end - start:.2f} seconds. Vespa search time: {result['timing']['searchtime']}")
     search_time = result["timing"]["searchtime"]
-    # Safely get total_count with a default of 0
     total_count = result.get("root", {}).get("fields", {}).get("totalCount", 0)
 
     search_results = app.vespa_app.results_to_search_results(result, idx_to_token)
+
+    # Store the results in the cache
+    request.app.results_cache[query_id] = search_results
 
     get_and_store_sim_maps(
         query_id=query_id,
@@ -724,6 +718,7 @@ async def deploy_part_1(request):
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
 
+        return {"status": "success", "auth_url": settings.vespa_cloud_endpoint} # TODO: remove this
         result = await deploy_application_step_1(settings)
         return result
 
@@ -746,13 +741,28 @@ async def deploy_part_2(request):
         documents = await request.app.db.get_user_documents(user_id)
         doc_names = {doc.document_id: doc.document_name for doc in documents}
 
-        result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
+        # result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
+        result = {"status": "success"} # TODO: remove this
 
         # Read the settings again to get the new URL
         settings: UserSettings = await request.app.db.get_user_settings(user_id)
         if not settings:
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
+
+        ##################
+        cert_dir = os.path.expanduser(f"~/.vespa/{settings.tenant_name}.{settings.app_name}.{settings.instance_name}")
+        private_key_path = os.path.join(cert_dir, "data-plane-private-key.pem")
+        public_cert_path = os.path.join(cert_dir, "data-plane-public-cert.pem")
+        with open(private_key_path, 'r') as f:
+            private_key = f.read()
+        with open(public_cert_path, 'r') as f:
+            public_cert = f.read()
+
+        # Set environment variables
+        os.environ["VESPA_CLOUD_MTLS_KEY"] = private_key
+        os.environ["VESPA_CLOUD_MTLS_CERT"] = public_cert
+        #############
 
         app.vespa_app = VespaQueryClient(logger=logger, settings=settings)
 
@@ -787,6 +797,31 @@ async def get_deployment_success_modal(request):
 @login_required
 async def get_deployment_error_modal(request):
     return DeploymentErrorModal()
+
+@rt("/detail")
+@login_required
+async def get(request, doc_id: str, query_id: str, query: str):
+    logger.info(f"/detail: Showing details for doc_id: {doc_id}, query: {query}")
+
+    # Convert query_id to int since it's stored as an integer key
+    query_id_int = int(query_id)
+
+    # Get the results from the cache
+    results = request.app.results_cache.get(query_id_int, [])
+
+    return await Layout(
+        Main(
+            SearchResult(
+                results=results,
+                query=query,
+                query_id=query_id,
+                doc_id=doc_id,
+            ),
+            data_overlayscrollbars_initialize=True,
+            cls="border-t",
+        ),
+        request=request
+    )
 
 if __name__ == "__main__":
     HOT_RELOAD = os.getenv("HOT_RELOAD", "False").lower() == "true"
