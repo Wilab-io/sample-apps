@@ -657,12 +657,9 @@ async def update_connection_settings(request):
     form = await request.form()
 
     settings = {
-        'vespa_host': form.get('vespa_host'),
-        'vespa_port': int(form.get('vespa_port')) if form.get('vespa_port') else None,
         'vespa_token_id': form.get('vespa_token_id'),
         'vespa_token_value': form.get('vespa_token_value'),
         'gemini_token': form.get('gemini_token'),
-        'vespa_cloud_endpoint': form.get('vespa_cloud_endpoint')
     }
 
     await request.app.db.update_settings(user_id, settings)
@@ -678,6 +675,7 @@ async def update_application_package_settings(request):
     settings = {
         'tenant_name': form.get('tenant_name'),
         'app_name': form.get('app_name'),
+        'instance_name': form.get('instance_name'),
         'schema': form.get('schema')
     }
 

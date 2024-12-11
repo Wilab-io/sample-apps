@@ -239,13 +239,12 @@ class Database:
             return False
 
         required_settings = [
-            settings.vespa_host,
-            settings.vespa_port,
             settings.vespa_token_id,
             settings.vespa_token_value,
             settings.gemini_token,
             settings.tenant_name,
             settings.app_name,
+            settings.instance_name,
             settings.prompt
         ]
 
