@@ -205,11 +205,24 @@ async def get(request):
 
 @rt("/search")
 @login_required
-async def get(request, query: str = "", ranking: str = "colpali", image_query: str = None):
-    logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}, image_query: {image_query}")
+async def get(request, query: str = "", ranking: str = "colpali", image_query: str = None, query_id: str = None):
+    logger.info(f"/search: Fetching results for query: {query}, ranking: {ranking}, image_query: {image_query}, query_id: {query_id}")
 
-    # Always render the SearchBox first
-    if not query and not image_query:
+    # Generate a unique query_id if not provided
+    if not query_id:
+        query_id = generate_query_id(image_query or query, ranking)
+
+    # Check if we have results in cache
+    if query_id in request.app.results_cache:
+        logger.info(f"Found cached results for query_id: {query_id}")
+        cached_results = request.app.results_cache[query_id]
+        return await Layout(
+            Main(Search(request, cached_results, query=query, image_query=image_query, query_id=query_id)),
+            request=request
+        )
+
+    # Always render the SearchBox first if no query parameters
+    if not any([query, image_query]):
         return await Layout(
             Main(
                 Div(
@@ -229,17 +242,88 @@ async def get(request, query: str = "", ranking: str = "colpali", image_query: s
 
     if image_query:
         logger.info(f"Processing image query with ID: {image_query}")
-        image_query_data = await app.db.get_image_query(image_query)
+        try:
+            # Get image query data from database
+            image_query_data = await request.app.db.get_image_query(image_query)
+            if not image_query_data:
+                logger.error(f"Image query not found: {image_query}")
+                return await Layout(
+                    Main(
+                        Div(
+                            SearchBox(query_value=query, ranking_value=ranking),
+                            Div(
+                                P(
+                                    "Image query not found.",
+                                    cls="text-center text-muted-foreground",
+                                ),
+                                cls="p-10",
+                            ),
+                            cls="grid",
+                        )
+                    ),
+                    request=request
+                )
 
-        if not image_query_data:
-            logger.error(f"Image query not found: {image_query}")
+            logger.info(f"Found image query data: visual_only={image_query_data.is_visual_only}")
+            embeddings = torch.tensor(image_query_data.embeddings)
+
+            # Use the appropriate query method based on visual_only flag
+            app = request.app.vespa_app
+            if image_query_data.is_visual_only:
+                logger.info("Using visual-only search")
+                response = await app.query_vespa_colpali(
+                    query="",  # Empty query for visual-only search
+                    q_emb=embeddings,
+                    ranking="colpali",
+                    sim_map=True,
+                    visual_only=True
+                )
+            else:
+                logger.info("Using hybrid search with text and visual features")
+                response = await app.query_vespa_colpali(
+                    query=image_query_data.text,
+                    q_emb=embeddings,
+                    ranking=ranking,
+                    sim_map=True
+                )
+
+            # Process the Vespa response
+            if not response or 'root' not in response:
+                raise ValueError("Invalid response from Vespa")
+
+            root = response['root']
+            if 'children' not in root:
+                raise ValueError("No results found in Vespa response")
+
+            search_results = []
+            for child in root['children']:
+                if 'fields' not in child:
+                    continue
+                fields = child['fields']
+                if 'id' not in fields:
+                    continue
+                search_results.append({
+                    'fields': fields,
+                    'relevance': child.get('relevance', 0.0)
+                })
+
+            # Cache results using only query_id
+            request.app.results_cache[query_id] = search_results
+            logger.info(f"Cached {len(search_results)} results for query_id: {query_id}")
+
+            return await Layout(
+                Main(Search(request, search_results, query=query, image_query=image_query, query_id=query_id)),
+                request=request
+            )
+        except Exception as e:
+            logger.error(f"Error processing image query: {str(e)}")
             return await Layout(
                 Main(
                     Div(
-                        SearchBox(query_value="", ranking_value=ranking),
+                        SearchBox(query_value=query, ranking_value=ranking),
                         Div(
                             P(
-                                "Image query not found.",
+                                f"Error processing image query: {str(e)}",
                                 cls="text-center text-muted-foreground",
                             ),
                             cls="p-10",
@@ -250,40 +334,23 @@ async def get(request, query: str = "", ranking: str = "colpali", image_query: s
                 request=request
             )
 
-        logger.info(f"Found image query data: visual_only={image_query_data.is_visual_only}")
-        embeddings = torch.tensor(image_query_data.embeddings)
-
-        if image_query_data.is_visual_only:
-            logger.info("Using visual-only search")
-            results = await app.vespa_app.query_vespa_colpali(
-                query="",  # Empty query for visual-only search
-                q_emb=embeddings,
-                ranking="colpali",
-                sim_map=True,
-                visual_only=True
-            )
-        else:
-            logger.info("Using hybrid search with text and visual features")
-            results = await app.vespa_app.query_vespa_colpali(
-                query=image_query_data.text,
-                q_emb=embeddings,
-                ranking="hybrid",
-                sim_map=True
-            )
-
-        logger.info(f"Found {len(results)} results")
-        return await Layout(
-            Main(Search(request, results)),
-            request=request
-        )
-
-    # Generate a unique query_id based on the query and ranking value
-    query_id = generate_query_id(query, ranking)
     # Show the loading message if a query is provided
     return await Layout(
-        Main(Search(request), data_overlayscrollbars_initialize=True, cls="border-t"),
+        Main(
+            Div(
+                SearchBox(query_value=query, ranking_value=ranking),
+                Div(
+                    P(
+                        "Loading results...",
+                        cls="text-center text-muted-foreground",
+                    ),
+                    cls="p-10",
+                ),
+                cls="grid",
+            )
+        ),
         request=request
-    )  # Show SearchBox and Loading message initially
+    )
 
 
 @rt("/fetch_results")
@@ -805,7 +872,6 @@ async def deploy_part_1(request):
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
 
-        return {"status": "success", "auth_url": settings.vespa_cloud_endpoint} # TODO: remove this
         result = await deploy_application_step_1(settings)
         return result
 
@@ -828,28 +894,13 @@ async def deploy_part_2(request):
         documents = await request.app.db.get_user_documents(user_id)
         doc_names = {doc.document_id: doc.document_name for doc in documents}
 
-        # result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
-        result = {"status": "success"} # TODO: remove this
+        result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
 
         # Read the settings again to get the new URL
         settings: UserSettings = await request.app.db.get_user_settings(user_id)
         if not settings:
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
-
-        ##################
-        cert_dir = os.path.expanduser(f"~/.vespa/{settings.tenant_name}.{settings.app_name}.{settings.instance_name}")
-        private_key_path = os.path.join(cert_dir, "data-plane-private-key.pem")
-        public_cert_path = os.path.join(cert_dir, "data-plane-public-cert.pem")
-        with open(private_key_path, 'r') as f:
-            private_key = f.read()
-        with open(public_cert_path, 'r') as f:
-            public_cert = f.read()
-
-        # Set environment variables
-        os.environ["VESPA_CLOUD_MTLS_KEY"] = private_key
-        os.environ["VESPA_CLOUD_MTLS_CERT"] = public_cert
-        #############
 
         app.vespa_app = VespaQueryClient(logger=logger, settings=settings)
 

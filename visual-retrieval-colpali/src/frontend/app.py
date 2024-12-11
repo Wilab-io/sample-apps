@@ -428,20 +428,25 @@ def AboutThisDemo():
     )
 
 
-def Search(request, search_results=[]):
-    query_value = request.query_params.get("query", "").strip()
+def Search(request, search_results=None, query: str = "", image_query: str = None, query_id: str = None):
     ranking_value = request.query_params.get("ranking", "colpali")
-    query_id = request.query_params.get("query_id", "")
 
     return Div(
         Div(
-            SearchBox(query_value=query_value, ranking_value=ranking_value, is_deployed=True),
+            SearchBox(query_value=query, ranking_value=ranking_value, is_deployed=True),
             Div(
                 Div(
-                    LoadingMessage(),
-                    id="search-results",
+                    Div(
+                        LoadingMessage() if not search_results else SearchResult(
+                            results=search_results,
+                            query=query,
+                            query_id=query_id,
+                            image_query=image_query
+                        ),
+                        id="search-results",
+                    ),
+                    cls="grid gap-4 w-full max-w-screen-xl mx-auto px-4",
                 ),
-                cls="grid gap-4 w-full max-w-screen-xl mx-auto px-4",
             ),
         ),
     )
@@ -501,7 +506,7 @@ def SearchInfo(search_time, total_count):
     )
 
 
-def ResultsList(results: list, query: str, query_id: Optional[str] = None, search_time: float = 0, total_count: int = 0):
+def ResultsList(results: list, query: str, query_id: Optional[str] = None, search_time: float = 0, total_count: int = 0, image_query: Optional[str] = None):
     if not results:
         return Div(
             P(
@@ -538,7 +543,7 @@ def ResultsList(results: list, query: str, query_id: Optional[str] = None, searc
                     ),
                     cls="p-4 hover:bg-muted transition-colors rounded-[10px]",
                 ),
-                href=f"/detail?doc_id={doc_id}&query_id={query_id}&query={quote_plus(query)}",
+                href=f"/detail?doc_id={doc_id}&query_id={query_id}&query={quote_plus(query or '')}&image_query={quote_plus(image_query or '')}",
                 cls="bg-white dark:bg-gray-900 rounded-[10px] shadow-md border border-gray-200 dark:border-gray-700 no-underline block",
             )
         )
@@ -595,6 +600,7 @@ def SearchResult(
     search_time: float = 0,
     total_count: int = 0,
     doc_id: Optional[str] = None,
+    image_query: Optional[str] = None,
 ):
     if not results:
         return Div(
@@ -606,7 +612,7 @@ def SearchResult(
         )
     # If no doc_id is provided, show the results list view
     if doc_id is None:
-        return ResultsList(results, query, query_id, search_time, total_count)
+        return ResultsList(results, query, query_id, search_time, total_count, image_query)
 
     # Otherwise, find the specific result and show the detail view
     result = next((r for r in results if r["fields"]["id"] == doc_id), None)
@@ -679,7 +685,7 @@ def SearchResult(
                     Div(
                         A(
                             Lucide(icon="arrow-left"),
-                            href=f"/search?query={quote_plus(query)}",
+                            href=f"/search?query={quote_plus(query or '')}&query_id={query_id or ''}&image_query={quote_plus(image_query or '')}",
                             cls="text-sm hover:underline rounded-full text-white bg-black border-none p-1",
                         ),
                         Lucide(icon="file-text"),
