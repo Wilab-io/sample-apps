@@ -54,7 +54,7 @@ class SimMapGenerator:
         """
         model = ColPali.from_pretrained(
             self.model_name,
-            torch_dtype=torch.bfloat16,  # Note that the embeddings created during feed were float32 -> binarized, yet setting this seem to produce the most similar results both locally (mps) and HF (Cuda)
+            torch_dtype=torch.float32,  # Note that the embeddings created during feed were float32 -> binarized, yet setting this seem to produce the most similar results both locally (mps) and HF (Cuda)
             device_map=self.device,
         ).eval()
 

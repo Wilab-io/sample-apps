@@ -21,12 +21,14 @@ CREATE TABLE user_settings (
     user_id UUID PRIMARY KEY,
     demo_questions TEXT[] DEFAULT ARRAY[]::TEXT[],
     ranker ranker_type NOT NULL DEFAULT 'colpali',
-    vespa_host VARCHAR(255),
-    vespa_port INTEGER,
-    vespa_token VARCHAR(255),
+    vespa_token_id VARCHAR(255),
+    vespa_token_value VARCHAR(255),
     gemini_token VARCHAR(255),
     vespa_cloud_endpoint VARCHAR(255),
-    schema VARCHAR(255),
+    tenant_name VARCHAR(255),
+    app_name VARCHAR(255),
+    instance_name VARCHAR(255),
+    schema TEXT,
     prompt TEXT,
     FOREIGN KEY (user_id) REFERENCES app_user(user_id)
 );
