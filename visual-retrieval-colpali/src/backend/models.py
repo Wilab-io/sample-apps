@@ -1,9 +1,8 @@
-from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Integer, Text, Float, Boolean
+from sqlalchemy import String, DateTime, ARRAY, Enum, UUID, Column, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 from .base import Base
 import uuid
-from typing import Optional
 from datetime import datetime
 import enum
 

@@ -48,10 +48,6 @@ from pypdf import PdfReader
 from colpali_engine.models import ColPali, ColPaliProcessor
 from vidore_benchmark.utils.image_utils import scale_image, get_base64_image
 
-# Other utilities
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
-
 from PIL import Image
 import pytesseract
 

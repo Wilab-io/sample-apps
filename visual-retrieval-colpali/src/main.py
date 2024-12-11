@@ -28,7 +28,6 @@ from fasthtml.common import (
 )
 from PIL import Image
 from shad4fast import ShadHead
-from vespa.application import Vespa
 from sqlalchemy import select
 from backend.auth import verify_password
 from backend.database import Database
