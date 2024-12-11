@@ -166,6 +166,7 @@ async def keepalive():
 @app.on_event("startup")
 async def startup_event():
     try:
+        os.environ["USE_MTLS"] = "true"
         await init_default_users(logger)
     except SystemExit:
         logger.error("Application Startup Failed")
