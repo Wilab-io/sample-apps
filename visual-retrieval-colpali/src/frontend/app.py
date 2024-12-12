@@ -176,7 +176,7 @@ def ShareButtons():
             href=f"https://www.linkedin.com/sharing/share-offsite/?url={quote_plus(url)}",
             rel="noopener noreferrer",
             target="_blank",
-            cls="bg-[#0A66C2] text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-md text-sm font-semibold",
+            cls="bg-[#0A66C2] text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-full text-sm font-semibold",
         ),
         A(
             Img(src="/static/img/x.svg", aria_hidden="true", cls="h-[21px]"),
@@ -184,14 +184,14 @@ def ShareButtons():
             href=f"https://twitter.com/intent/tweet?text={quote_plus(title)}&url={quote_plus(url)}",
             rel="noopener noreferrer",
             target="_blank",
-            cls="bg-black text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-md text-sm font-semibold",
+            cls="bg-black text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-full text-sm font-semibold",
         ),
         cls="flex items-center justify-center space-x-8 mt-5",
     )
 
 
 class SearchBox:
-    grid_cls = "grid gap-2 p-3 rounded-md border border-input bg-muted w-full ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-input rounded-[10px]"
+    grid_cls = "grid gap-2 p-3 rounded-[10px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-md w-full"
 
     def __init__(self, query_value: str = "", ranking_value: str = "colpali", is_deployed: bool = False):
         self.query_value = query_value
@@ -208,9 +208,10 @@ class SearchBox:
                         name="query",
                         placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
                         value=self.query_value,
-                        cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-search-cancel-button]:hidden",
+                        cls="w-full px-4 py-2 text-lg border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-search-cancel-button]:hidden focus:outline-none focus:border-black focus:ring-0",
                         autofocus=True,
-                        disabled=not self.is_deployed
+                        disabled=not self.is_deployed,
+                        style="border-radius: 10px;"
                     ),
                     Button(
                         Lucide(icon="camera", size="20"),
