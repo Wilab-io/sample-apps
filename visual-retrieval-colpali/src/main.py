@@ -779,7 +779,7 @@ async def update_demo_questions(request):
         user_id = request.session["user_id"]
         await request.app.db.update_settings(user_id, {'demo_questions': questions})
 
-    return Redirect("/settings?tab=ranker")
+    return Redirect("/settings?tab=demo-questions")
 
 @rt("/api/settings/ranker", methods=["POST"])
 @login_required
@@ -790,7 +790,7 @@ async def update_ranker(request):
 
     await request.app.db.update_settings(user_id, {'ranker': ranker})
 
-    return Redirect("/settings?tab=connection")
+    return Redirect("/settings?tab=ranker")
 
 @rt("/api/settings/connection", methods=["POST"])
 @login_required
@@ -806,7 +806,7 @@ async def update_connection_settings(request):
 
     await request.app.db.update_settings(user_id, settings)
 
-    return Redirect("/settings?tab=application-package")
+    return Redirect("/settings?tab=connection")
 
 @rt("/api/settings/application-package", methods=["POST"])
 @login_required
@@ -823,10 +823,8 @@ async def update_application_package_settings(request):
 
     await request.app.db.update_settings(user_id, settings)
 
-    if request.session["username"] != "admin":
-        return Redirect("/settings?tab=application-package")
-    else:
-        return Redirect("/settings?tab=prompt")
+    return Redirect("/settings?tab=application-package")
+
 
 @rt("/api/settings/prompt", methods=["POST"])
 @login_required

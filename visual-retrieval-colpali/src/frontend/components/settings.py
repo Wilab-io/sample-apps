@@ -67,13 +67,13 @@ def TabContent(active_tab: str, settings: UserSettings = None, username: str = N
     return Div(
         TabButtons(active_tab, username, appConfigured),
         Div(
-            _get_tab_content(active_tab, settings, username),
+            _get_tab_content(active_tab, settings),
             cls="bg-white dark:bg-gray-900 p-4 rounded-[10px] shadow-md w-full border border-gray-200 dark:border-gray-700",
         ),
         id="settings-content"
     )
 
-def _get_tab_content(active_tab: str, settings: UserSettings = None, username: str = None):
+def _get_tab_content(active_tab: str, settings: UserSettings = None):
     if active_tab == "demo-questions":
         return DemoQuestions(questions=settings.demo_questions if settings else [])
     elif active_tab == "ranker":
@@ -81,8 +81,8 @@ def _get_tab_content(active_tab: str, settings: UserSettings = None, username: s
     elif active_tab == "connection":
         return ConnectionSettings(settings=settings)
     elif active_tab == "application-package":
-        return ApplicationPackageSettings(settings=settings, username=username)
-    elif active_tab == "prompt" and username == "admin":
+        return ApplicationPackageSettings(settings=settings)
+    elif active_tab == "prompt":
         return PromptSettings(settings=settings)
     return ""
 
@@ -133,19 +133,17 @@ def DemoQuestions(questions: list[str]):
                 cls="flex-grow self-center"
             ),
             Button(
-                "Next",
+                "Save",
                 cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
                 id="save-questions-disabled",
                 disabled=True,
             ),
             Button(
-                "Next",
+                "Save",
                 cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
                 id="save-questions",
-                **{
-                    "hx-post": "/api/settings/demo-questions",
-                    "hx-trigger": "click"
-                }
+                hx_post="/api/settings/demo-questions",
+                hx_trigger="click",
             ),
             cls="flex items-center w-full gap-4"
         ),
@@ -212,17 +210,15 @@ def RankerSettings(ranker: str = "colpali"):
                     cls="flex-grow self-center"
                 ),
                 Button(
-                    "Next",
+                    "Save",
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80",
                     id="save-ranker",
-                    type="submit"
+                    type="submit",
+                    hx_post="/api/settings/ranker",
+                    hx_trigger="click",
                 ),
                 cls="flex items-center w-full gap-4"
             ),
-            **{
-                "hx-post": "/api/settings/ranker",
-                "hx-trigger": "submit"
-            }
         ),
         cls="space-y-4"
     )
@@ -300,29 +296,27 @@ def ConnectionSettings(settings: UserSettings = None):
                     cls="flex-grow self-center"
                 ),
                 Button(
-                    "Next",
+                    "Save",
                     cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
                     id="save-connection-disabled",
                     disabled=True,
                 ),
                 Button(
-                    "Next",
+                    "Save",
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
                     id="save-connection",
-                    type="submit"
+                    type="submit",
+                    hx_post="/api/settings/connection",
+                    hx_trigger="click",
                 ),
                 cls="flex items-center w-full gap-4"
             ),
             cls="space-y-4",
-            **{
-                "hx-post": "/api/settings/connection",
-                "hx-trigger": "submit"
-            }
         ),
         cls="space-y-4"
     )
 
-def ApplicationPackageSettings(settings: UserSettings = None, username: str = None):
+def ApplicationPackageSettings(settings: UserSettings = None):
     return Div(
         Div(
             H2("Application package settings", cls="text-xl font-semibold px-4 mb-4"),
@@ -347,7 +341,8 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 value=settings.tenant_name if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="tenant_name",
-                                required=True
+                                required=True,
+                                **{"data-original": settings.tenant_name if settings else ''}
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -368,7 +363,8 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 name="app_name",
                                 required=True,
                                 pattern="[a-z0-9]+",
-                                title="Only lowercase letters and numbers allowed, no spaces or special characters, start with a letter"
+                                title="Only lowercase letters and numbers allowed, no spaces or special characters, start with a letter",
+                                **{"data-original": settings.app_name if settings else ''}
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -384,6 +380,7 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="instance_name",
                                 required=True,
+                                **{"data-original": settings.instance_name if settings else ''}
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -398,7 +395,8 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                                 settings.schema if settings else '',
                                 cls="flex-1 w-full h-[200px] rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="schema",
-                                required=True
+                                required=True,
+                                **{"data-original": settings.schema if settings else ''}
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -418,24 +416,22 @@ def ApplicationPackageSettings(settings: UserSettings = None, username: str = No
                     cls="flex-grow self-center"
                 ),
                 Button(
-                    "Save" if username != "admin" else "Next", # admin user has one more tab after this one
+                    "Save",
                     cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next",
                     id="save-application-package-disabled",
                     disabled=True,
                 ),
                 Button(
-                    "Save" if username != "admin" else "Next", # admin user has one more tab after this one
+                    "Save",
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next hidden",
                     id="save-application-package",
-                    type="submit"
+                    type="submit",
+                    hx_post="/api/settings/application-package",
+                    hx_trigger="click",
                 ),
                 cls="flex items-center w-full gap-4"
             ),
             cls="space-y-4",
-            **{
-                "hx-post": "/api/settings/application-package",
-                "hx-trigger": "submit"
-            }
         ),
         cls="space-y-4"
     )
@@ -470,16 +466,13 @@ def PromptSettings(settings: UserSettings = None):
                 Button(
                     "Save",
                     cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] enabled:hover:opacity-80",
-                    type="submit"
+                    type="submit",
+                    hx_post="/api/settings/prompt",
+                    hx_trigger="click",
                 ),
                 cls="flex items-center w-full gap-4"
             ),
             cls="space-y-4",
-            **{
-                "hx-post": "/api/settings/prompt",
-                "hx-trigger": "submit",
-                "hx-swap": "none"
-            }
         ),
         cls="space-y-4"
     )
