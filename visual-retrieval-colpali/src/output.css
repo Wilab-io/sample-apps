@@ -967,6 +967,22 @@ body {
   height: 1px;
 }
 
+.h-24 {
+  height: 6rem;
+}
+
+.h-auto {
+  height: auto;
+}
+
+.max-h-\[500px\] {
+  max-height: 500px;
+}
+
+.max-h-\[200px\] {
+  max-height: 200px;
+}
+
 .min-h-0 {
   min-height: 0px;
 }
@@ -1416,6 +1432,10 @@ body {
 
 .to-slate-700 {
   --tw-gradient-to: #334155 var(--tw-gradient-to-position);
+}
+
+.to-transparent {
+  --tw-gradient-to: transparent var(--tw-gradient-to-position);
 }
 
 .bg-clip-text {
@@ -2242,5 +2262,9 @@ aside {
 .dark\:hover\:bg-gray-700:hover:where(.dark, .dark *) {
   --tw-bg-opacity: 1;
   background-color: rgb(55 65 81 / var(--tw-bg-opacity));
+}
+
+.\[\&\:\:-webkit-search-cancel-button\]\:hidden::-webkit-search-cancel-button {
+  display: none;
 }
 

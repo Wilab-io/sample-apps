@@ -208,14 +208,14 @@ class SearchBox:
                         name="query",
                         placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
                         value=self.query_value,
-                        cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
+                        cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-search-cancel-button]:hidden",
                         autofocus=True,
                         disabled=not self.is_deployed
                     ),
                     Button(
                         Lucide(icon="camera", size="20"),
                         type="button",
-                        cls="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-muted rounded-full",
+                        cls="absolute right-2 top-1/2 -translate-y-1/2 p-2",
                         disabled=not self.is_deployed,
                         onclick="document.getElementById('image-upload').click()"
                     ),
