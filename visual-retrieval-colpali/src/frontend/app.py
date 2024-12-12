@@ -527,19 +527,22 @@ def ResultsList(results: list, query: str, query_id: Optional[str] = None, searc
             A(
                 Div(
                     Div(
-                        H2(fields["title"], cls="text-lg font-semibold text-blue-500"),
                         Div(
-                            Badge(
-                                f"Relevance score: {result['relevance']:.4f}",
-                                cls="text-sm rounded-full text-white bg-black border-none p-2",
+                            H2(fields["title"], cls="text-lg font-semibold text-blue-500"),
+                            Div(
+                                Badge(
+                                    f"Relevance score: {result['relevance']:.4f}",
+                                    cls="text-sm rounded-full text-white bg-black border-none p-2",
+                                ),
+                                Badge(
+                                    "Best match",
+                                    cls="text-sm rounded-full text-white bg-green-500 border-none p-2",
+                                ) if idx == 0 else None,
+                                cls="flex gap-2 items-center",
                             ),
-                            Badge(
-                                "Best match",
-                                cls="text-sm rounded-full text-white bg-green-500 border-none p-2",
-                            ) if idx == 0 else None,
-                            cls="flex gap-2 items-center",
+                            cls="flex justify-between items-center",
                         ),
-                        cls="flex justify-between items-center",
+                        cls="p-4 hover:bg-muted transition-colors rounded-[10px]",
                     ),
                     cls="p-4 hover:bg-muted transition-colors rounded-[10px]",
                 ),
@@ -762,12 +765,12 @@ def SearchResult(
                                             ),
                                             P(
                                                 NotStr(fields.get("snippet", "")),
-                                                cls="text-highlight text-muted-foreground",
+                                                cls="text-highlight text-muted-foreground break-words",
                                             ),
-                                            cls="grid grid-rows-[auto_0px] content-start gap-y-3",
+                                            cls="grid content-start gap-y-3",
                                         ),
                                         id=f"result-text-snippet-0",
-                                        cls="grid gap-y-3 p-8 border border-dashed",
+                                        cls="grid gap-y-3 p-8 border border-dashed break-words",
                                     ),
                                     Div(
                                         Div(
@@ -779,14 +782,14 @@ def SearchResult(
                                                 Div(
                                                     P(
                                                         NotStr(fields.get("text", "")),
-                                                        cls="text-highlight text-muted-foreground",
+                                                        cls="text-highlight text-muted-foreground break-words",
                                                     ),
                                                     Br(),
                                                 ),
-                                                cls="grid grid-rows-[auto_0px] content-start gap-y-3",
+                                                cls="grid content-start gap-y-3",
                                             ),
                                             id=f"result-text-full-0",
-                                            cls="grid gap-y-3 p-8 border border-dashed",
+                                            cls="grid gap-y-3 p-8 border border-dashed max-h-[500px] overflow-hidden break-words",
                                         ),
                                         Div(
                                             cls="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#fcfcfd] dark:from-[#1c2024] pt-[7%]"
