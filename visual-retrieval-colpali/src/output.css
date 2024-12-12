@@ -1272,6 +1272,10 @@ body {
   white-space: pre-line;
 }
 
+.break-words {
+  overflow-wrap: break-word;
+}
+
 .rounded-\[10px\] {
   border-radius: 10px;
 }
