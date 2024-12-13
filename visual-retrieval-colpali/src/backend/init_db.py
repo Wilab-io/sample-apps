@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import select, text
 from .database import engine, async_session
 from .auth import hash_password
 from .models import User, Base
@@ -6,6 +6,21 @@ import logging
 from sqlalchemy.exc import SQLAlchemyError
 from asyncpg.exceptions import ConnectionDoesNotExistError, CannotConnectNowError, PostgresConnectionError
 import sys
+
+async def clear_image_queries(logger: logging.Logger):
+    try:
+        async with async_session() as session:
+            try:
+                # Use raw SQL for a simple truncate operation
+                await session.execute(text("TRUNCATE TABLE image_queries"))
+                await session.commit()
+                logger.info("Successfully cleared image_queries table")
+            except Exception as e:
+                logger.error(f"Error clearing image_queries table: {e}")
+                raise
+    except Exception as e:
+        logger.error(f"Failed to clear image_queries table: {e}")
+        raise
 
 async def init_default_users(logger: logging.Logger):
     try:
@@ -79,3 +94,4 @@ async def init_default_users(logger: logging.Logger):
         logger.error("An unexpected error occurred during database initialization.")
         logger.error(f"Error details: {str(e)}")
         sys.exit(1)
+

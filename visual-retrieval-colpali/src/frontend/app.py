@@ -31,14 +31,10 @@ check_input_script = Script(
         window.onload = function() {
             const input = document.getElementById('search-input');
             const button = document.querySelector('[data-button="search-button"]');
-            const radioGroupItems = document.querySelectorAll('button[data-ref="radio-item"]');  // Get all radio buttons
 
             function checkInputValue() {
                 const isInputEmpty = input.value.trim() === "";
                 button.disabled = isInputEmpty;  // Disable the submit button
-                radioGroupItems.forEach(item => {
-                    item.disabled = isInputEmpty;  // Disable/enable the radio buttons
-                });
             }
 
             input.addEventListener('input', checkInputValue);  // Listen for input changes
@@ -180,7 +176,7 @@ def ShareButtons():
             href=f"https://www.linkedin.com/sharing/share-offsite/?url={quote_plus(url)}",
             rel="noopener noreferrer",
             target="_blank",
-            cls="bg-[#0A66C2] text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-md text-sm font-semibold",
+            cls="bg-[#0A66C2] text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-full text-sm font-semibold",
         ),
         A(
             Img(src="/static/img/x.svg", aria_hidden="true", cls="h-[21px]"),
@@ -188,14 +184,14 @@ def ShareButtons():
             href=f"https://twitter.com/intent/tweet?text={quote_plus(title)}&url={quote_plus(url)}",
             rel="noopener noreferrer",
             target="_blank",
-            cls="bg-black text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-md text-sm font-semibold",
+            cls="bg-black text-white inline-flex items-center gap-x-1.5 px-2.5 py-1.5 border rounded-full text-sm font-semibold",
         ),
         cls="flex items-center justify-center space-x-8 mt-5",
     )
 
 
 class SearchBox:
-    grid_cls = "grid gap-2 p-3 rounded-md border border-input bg-muted w-full ring-offset-background focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 focus-within:border-input"
+    grid_cls = "grid gap-2 p-3 rounded-[10px] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-md w-full"
 
     def __init__(self, query_value: str = "", ranking_value: str = "colpali", is_deployed: bool = False):
         self.query_value = query_value
@@ -205,20 +201,42 @@ class SearchBox:
     def __ft__(self):
         return Div(
             Form(
-                Input(
-                    type="search",
-                    name="query",
-                    placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
-                    value=self.query_value,
-                    cls="w-full px-4 py-2 text-lg border rounded-[10px] bg-background disabled:opacity-50 disabled:cursor-not-allowed",
-                    autofocus=True,
-                    disabled=not self.is_deployed
+                Div(
+                    Input(
+                        type="search",
+                        id="search-input",
+                        name="query",
+                        placeholder="Setup and deploy the application to use the search feature" if not self.is_deployed else "Search...",
+                        value=self.query_value,
+                        cls="w-full px-4 py-2 text-lg border border-gray-200 dark:border-gray-700 rounded-[10px] bg-white dark:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed [&::-webkit-search-cancel-button]:hidden focus:outline-none focus:border-black focus:ring-0",
+                        autofocus=True,
+                        disabled=not self.is_deployed,
+                        style="border-radius: 10px;"
+                    ),
+                    Button(
+                        Lucide(icon="camera", size="20"),
+                        type="button",
+                        cls="absolute right-2 top-1/2 -translate-y-1/2 p-2",
+                        disabled=not self.is_deployed,
+                        onclick="document.getElementById('image-upload').click()"
+                    ),
+                    Input(
+                        type="file",
+                        id="image-upload",
+                        name="image",
+                        accept="image/*",
+                        cls="hidden",
+                        onchange="handleImageUpload(this)"
+                    ),
+                    cls="relative"
                 ),
                 P(
                     f"Ranking by: {self.ranking_value.title()}" if self.is_deployed else "",
                     cls="text-sm text-muted-foreground mt-2"
                 ),
                 check_input_script,
+                toggle_text_content,
+                image_swapping,
                 autocomplete_script,
                 submit_form_on_radio_change,
                 action=f"/search?query={quote_plus(self.query_value)}&ranking={quote_plus(self.ranking_value)}",
@@ -410,20 +428,26 @@ def AboutThisDemo():
     )
 
 
-def Search(request, search_results=[]):
-    query_value = request.query_params.get("query", "").strip()
+def Search(request, search_results=None, query: str = "", image_query: str = None, query_id: str = None):
     ranking_value = request.query_params.get("ranking", "colpali")
+
     return Div(
         Div(
+            SearchBox(query_value=query, ranking_value=ranking_value, is_deployed=True),
             Div(
-                SearchBox(query_value=query_value, ranking_value=ranking_value, is_deployed=  True),
                 Div(
-                    LoadingMessage(),
-                    id="search-results",  # This will be replaced by the search results
+                    Div(
+                        LoadingMessage() if not search_results else SearchResult(
+                            results=search_results,
+                            query=query,
+                            query_id=query_id,
+                            image_query=image_query
+                        ),
+                        id="search-results",
+                    ),
+                    cls="grid gap-4 w-full max-w-screen-xl mx-auto px-4",
                 ),
-                cls="grid",
             ),
-            cls="grid",
         ),
     )
 
@@ -452,7 +476,7 @@ def SimMapButtonReady(query_id, idx, token, token_idx, img_src):
         size="sm",
         data_image_src=img_src,
         id=f"sim-map-button-{query_id}-{idx}-{token_idx}-{token}",
-        cls="sim-map-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2",
+        cls="sim-map-button pointer-events-auto font-mono text-xs h-5 rounded-full px-2 bg-black text-white p-2 ml-1 mb-1",
     )
 
 
@@ -469,28 +493,20 @@ def SimMapButtonPoll(query_id, idx, token, token_idx):
 
 
 def SearchInfo(search_time, total_count):
-    return (
-        Div(
-            Span(
-                "Retrieved ",
-                Strong(total_count),
-                Span(" results"),
-                Span(" in "),
-                Strong(f"{search_time:.3f}"),  # 3 significant digits
-                Span(" seconds."),
-            ),
-            cls="grid bg-background border-t text-sm text-center p-3",
+    return Div(
+        Span(
+            "Retrieved ",
+            Strong(total_count),
+            Span(" results"),
+            Span(" in "),
+            Strong(f"{search_time:.3f}"),  # 3 significant digits
+            Span(" seconds."),
         ),
+        cls="text-sm text-center p-3",
     )
 
 
-def SearchResult(
-    results: list,
-    query: str,
-    query_id: Optional[str] = None,
-    search_time: float = 0,
-    total_count: int = 0,
-):
+def ResultsList(results: list, query: str, query_id: Optional[str] = None, search_time: float = 0, total_count: int = 0, image_query: Optional[str] = None):
     if not results:
         return Div(
             P(
@@ -500,72 +516,181 @@ def SearchResult(
             cls="grid p-10",
         )
 
-    doc_ids = []
-    # Otherwise, display the search results
     result_items = []
+    doc_ids = []
     for idx, result in enumerate(results):
-        fields = result["fields"]  # Extract the 'fields' part of each result
+        fields = result["fields"]
         doc_id = fields["id"]
         doc_ids.append(doc_id)
-        blur_image_base64 = f"data:image/jpeg;base64,{fields['blur_image']}"
-
-        sim_map_fields = {
-            key: value
-            for key, value in fields.items()
-            if key.startswith(
-                "sim_map_"
-            )  # filtering is done before creating with 'should_filter_token'-function
-        }
-
-        # Generate buttons for the sim_map fields
-        sim_map_buttons = []
-        for key, value in sim_map_fields.items():
-            token = key.split("_")[-2]
-            token_idx = int(key.split("_")[-1])
-            if value is not None:
-                sim_map_base64 = f"data:image/jpeg;base64,{value}"
-                sim_map_buttons.append(
-                    SimMapButtonReady(
-                        query_id=query_id,
-                        idx=idx,
-                        token=token,
-                        token_idx=token_idx,
-                        img_src=sim_map_base64,
-                    )
-                )
-            else:
-                sim_map_buttons.append(
-                    SimMapButtonPoll(
-                        query_id=query_id,
-                        idx=idx,
-                        token=token,
-                        token_idx=token_idx,
-                    )
-                )
-
-        # Add "Reset Image" button to restore the full image
-        reset_button = Button(
-            "Reset",
-            variant="outline",
-            size="sm",
-            data_image_src=blur_image_base64,
-            cls="reset-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2",
-        )
-
-        tokens_icon = Lucide(icon="images", size="15")
-
-        # Add "Tokens" button - this has no action, just a placeholder
-        tokens_button = Button(
-            tokens_icon,
-            "Tokens",
-            size="sm",
-            cls="tokens-button flex gap-[3px] font-bold pointer-events-none font-mono text-xs h-5 rounded-none px-2",
-        )
 
         result_items.append(
+            A(
+                Div(
+                    Div(
+                        Div(
+                            H2(fields["title"], cls="text-lg font-semibold text-blue-500"),
+                            Div(
+                                Badge(
+                                    f"Relevance score: {result['relevance']:.4f}",
+                                    cls="text-sm rounded-full text-white bg-black border-none p-2",
+                                ),
+                                Badge(
+                                    "Best match",
+                                    cls="text-sm rounded-full text-white bg-green-500 border-none p-2",
+                                ) if idx == 0 else None,
+                                cls="flex gap-2 items-center",
+                            ),
+                            cls="flex justify-between items-center",
+                        ),
+                        cls="p-4 hover:bg-muted transition-colors rounded-[10px]",
+                    ),
+                    cls="p-4 hover:bg-muted transition-colors rounded-[10px]",
+                ),
+                href=f"/detail?doc_id={doc_id}&query_id={query_id}&query={quote_plus(query or '')}&image_query={quote_plus(image_query or '')}",
+                cls="bg-white dark:bg-gray-900 rounded-[10px] shadow-md border border-gray-200 dark:border-gray-700 no-underline block",
+            )
+        )
+
+    return Div(
+        SearchInfo(search_time, total_count),
+        Div(
+            Div(
+                ChatResult(query_id=query_id, query=query, doc_ids=doc_ids),
+                cls="bg-white dark:bg-gray-900 rounded-[10px] shadow-md shadow-green-500 border-4 border-green-500 dark:border-green-700 p-4",
+            ),
+            cls="mb-8",
+        ),
+        Div(
+            *result_items,
+            cls="grid gap-4 mt-4",
+        ),
+        id="search-results",
+        cls="w-full max-w-screen-xl mx-auto px-4",
+    )
+
+
+def ChatResult(query_id: str, query: str, doc_ids: Optional[list] = None):
+    messages = Div(LoadingSkeleton())
+
+    if doc_ids:
+        messages = Div(
+            LoadingSkeleton(),
+            hx_ext="sse",
+            sse_connect=f"/get-message?query_id={query_id}&doc_ids={','.join(doc_ids)}&query={quote_plus(query)}",
+            sse_swap="message",
+            sse_close="close",
+            hx_swap="innerHTML",
+        )
+
+    return Div(
+        Div("AI-response (Gemini-8B)", cls="text-xl font-semibold p-5"),
+        Div(
+            Div(
+                messages,
+            ),
+            id="chat-messages",
+            cls="overflow-auto min-h-0 grid items-end px-5",
+        ),
+        id="chat_messages",
+        cls="h-full grid grid-rows-[auto_1fr_auto] min-h-0 gap-3",
+    )
+
+
+def SearchResult(
+    results: list,
+    query: str,
+    query_id: Optional[str] = None,
+    search_time: float = 0,
+    total_count: int = 0,
+    doc_id: Optional[str] = None,
+    image_query: Optional[str] = None,
+):
+    if not results:
+        return Div(
+            P(
+                "No results found for your query.",
+                cls="text-muted-foreground text-base text-center",
+            ),
+            cls="grid p-10",
+        )
+    # If no doc_id is provided, show the results list view
+    if doc_id is None:
+        return ResultsList(results, query, query_id, search_time, total_count, image_query)
+
+    # Otherwise, find the specific result and show the detail view
+    result = next((r for r in results if r["fields"]["id"] == doc_id), None)
+    if not result:
+        return Div(
+            P(
+                "Document not found.",
+                cls="text-muted-foreground text-base text-center",
+            ),
+            cls="grid p-10",
+        )
+
+    fields = result["fields"]
+    blur_image_base64 = f"data:image/jpeg;base64,{fields['blur_image']}"
+
+    sim_map_fields = {
+        key: value
+        for key, value in fields.items()
+        if key.startswith("sim_map_")
+    }
+
+    # Generate buttons for the sim_map fields
+    sim_map_buttons = []
+    for key, value in sim_map_fields.items():
+        token = key.split("_")[-2]
+        token_idx = int(key.split("_")[-1])
+        if value is not None:
+            sim_map_base64 = f"data:image/jpeg;base64,{value}"
+            sim_map_buttons.append(
+                SimMapButtonReady(
+                    query_id=query_id,
+                    idx=0,
+                    token=token,
+                    token_idx=token_idx,
+                    img_src=sim_map_base64,
+                )
+            )
+        else:
+            sim_map_buttons.append(
+                SimMapButtonPoll(
+                    query_id=query_id,
+                    idx=0,
+                    token=token,
+                    token_idx=token_idx,
+                )
+            )
+
+    # Add "Reset Image" button
+    reset_button = Button(
+        "Reset",
+        variant="outline",
+        size="sm",
+        data_image_src=blur_image_base64,
+        cls="reset-button pointer-events-auto font-mono text-xs h-5 rounded-none px-2 ml-1 mb-1",
+    )
+
+    tokens_icon = Lucide(icon="images", size="15")
+    tokens_button = Button(
+        tokens_icon,
+        "Tokens",
+        size="sm",
+        cls="tokens-button flex gap-[3px] font-bold pointer-events-none font-mono text-xs h-5 rounded-none px-2 mb-1",
+    )
+
+    return Div(
+        Div(
+            SearchBox(query_value=query, ranking_value="colpali", is_deployed=True),
             Div(
                 Div(
                     Div(
+                        A(
+                            Lucide(icon="arrow-left"),
+                            href=f"/search?query={quote_plus(query or '')}&query_id={query_id or ''}&image_query={quote_plus(image_query or '')}",
+                            cls="text-sm hover:underline rounded-full text-white bg-black border-none p-1",
+                        ),
                         Lucide(icon="file-text"),
                         H2(fields["title"], cls="text-xl md:text-2xl font-semibold"),
                         Separator(orientation="vertical"),
@@ -579,9 +704,9 @@ def SearchResult(
                         Button(
                             "Hide Text",
                             size="sm",
-                            id=f"toggle-button-{idx}",
-                            onclick=f"toggleTextContent({idx})",
-                            cls="hidden md:block",
+                            id=f"toggle-button-0",
+                            onclick=f"toggleTextContent(0)",
+                            cls="hidden md:block rounded-full bg-black text-white p-2",
                         ),
                     ),
                     cls="flex flex-wrap items-center justify-between bg-background px-3 py-4",
@@ -615,7 +740,7 @@ def SearchResult(
                             ),
                             cls="block",
                         ),
-                        id=f"image-column-{idx}",
+                        id=f"image-column-0",
                         cls="image-column relative bg-background px-3 py-5 grid-image-column",
                     ),
                     Div(
@@ -640,12 +765,12 @@ def SearchResult(
                                             ),
                                             P(
                                                 NotStr(fields.get("snippet", "")),
-                                                cls="text-highlight text-muted-foreground",
+                                                cls="text-highlight text-muted-foreground break-words",
                                             ),
-                                            cls="grid grid-rows-[auto_0px] content-start gap-y-3",
+                                            cls="grid content-start gap-y-3",
                                         ),
-                                        id=f"result-text-snippet-{idx}",
-                                        cls="grid gap-y-3 p-8 border border-dashed",
+                                        id=f"result-text-snippet-0",
+                                        cls="grid gap-y-3 p-8 border border-dashed break-words",
                                     ),
                                     Div(
                                         Div(
@@ -657,14 +782,14 @@ def SearchResult(
                                                 Div(
                                                     P(
                                                         NotStr(fields.get("text", "")),
-                                                        cls="text-highlight text-muted-foreground",
+                                                        cls="text-highlight text-muted-foreground break-words",
                                                     ),
                                                     Br(),
                                                 ),
-                                                cls="grid grid-rows-[auto_0px] content-start gap-y-3",
+                                                cls="grid content-start gap-y-3",
                                             ),
-                                            id=f"result-text-full-{idx}",
-                                            cls="grid gap-y-3 p-8 border border-dashed",
+                                            id=f"result-text-full-0",
+                                            cls="grid gap-y-3 p-8 border border-dashed max-h-[500px] overflow-hidden break-words",
                                         ),
                                         Div(
                                             cls="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#fcfcfd] dark:from-[#1c2024] pt-[7%]"
@@ -677,56 +802,14 @@ def SearchResult(
                             ),
                             cls="grid bg-muted p-2",
                         ),
-                        id=f"text-column-{idx}",
+                        id=f"text-column-0",
                         cls="text-column relative bg-background px-3 py-5 hidden md-grid-text-column",
                     ),
-                    id=f"image-text-columns-{idx}",
+                    id=f"image-text-columns-0",
                     cls="relative grid grid-cols-1 border-t grid-image-text-columns",
                 ),
                 cls="grid grid-cols-1 grid-rows-[auto_auto_1fr]",
             ),
-        )
-
-    return [
-        Div(
-            SearchInfo(search_time, total_count),
-            *result_items,
-            image_swapping,
-            toggle_text_content,
-            dynamic_elements_scrollbars,
-            id="search-results",
-            cls="grid grid-cols-1 gap-px bg-border min-h-0",
+            cls="grid gap-4 w-full max-w-screen-xl mx-auto px-4",
         ),
-        Div(
-            ChatResult(query_id=query_id, query=query, doc_ids=doc_ids),
-            hx_swap_oob="true",
-            id="chat_messages",
-        ),
-    ]
-
-
-def ChatResult(query_id: str, query: str, doc_ids: Optional[list] = None):
-    messages = Div(LoadingSkeleton())
-
-    if doc_ids:
-        messages = Div(
-            LoadingSkeleton(),
-            hx_ext="sse",
-            sse_connect=f"/get-message?query_id={query_id}&doc_ids={','.join(doc_ids)}&query={quote_plus(query)}",
-            sse_swap="message",
-            sse_close="close",
-            hx_swap="innerHTML",
-        )
-
-    return Div(
-        Div("AI-response (Gemini-8B)", cls="text-xl font-semibold p-5"),
-        Div(
-            Div(
-                messages,
-            ),
-            id="chat-messages",
-            cls="overflow-auto min-h-0 grid items-end px-5",
-        ),
-        id="chat_messages",
-        cls="h-full grid grid-rows-[auto_1fr_auto] min-h-0 gap-3",
     )

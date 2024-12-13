@@ -4,26 +4,6 @@ from lucide_fasthtml import Lucide
 from shad4fast import Button, Separator
 from sqlalchemy import select
 from uuid import UUID
-from backend.models import User
-
-layout_script = Script(
-    """
-    document.addEventListener("DOMContentLoaded", function () {
-          const main = document.querySelector('main');
-          const aside = document.querySelector('aside');
-          const body = document.body;
-
-          if (main && aside && main.nextElementSibling === aside) {
-            // If we have both main and aside, adjust the layout for larger screens
-            body.classList.remove('grid-cols-1'); // Remove single-column layout
-            body.classList.add('md:grid-cols-[minmax(0,_45fr)_minmax(0,_15fr)]'); // Two-column layout on larger screens
-          } else if (main) {
-            // If only main, keep it full width
-            body.classList.add('grid-cols-1');
-          }
-    });
-    """
-)
 
 overlay_scrollbars_manager = Script(
     """
@@ -214,7 +194,6 @@ async def Layout(*c, is_home=False, request=None, **kwargs):
             data_is_home=str(is_home).lower(),
             cls="grid grid-rows-[minmax(0,55px)_minmax(0,1fr)] min-h-0",
         ),
-        layout_script,
         overlay_scrollbars_manager,
         static_elements_scrollbars,
     )
