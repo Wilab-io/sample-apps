@@ -882,12 +882,7 @@ async def deploy_part_2(request):
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
 
-        model = app.sim_map_generator.model
-        processor = app.sim_map_generator.processor
-        documents = await request.app.db.get_user_documents(user_id)
-        doc_names = {doc.document_id: doc.document_name for doc in documents}
-
-        result = await deploy_application_step_2(request, settings, user_id, model, processor, doc_names)
+        result = await deploy_application_step_2(request, settings, user_id)
 
         # Read the settings again to get the new URL
         settings: UserSettings = await request.app.db.get_user_settings(user_id)
