@@ -240,8 +240,6 @@ class Database:
             return False
 
         required_settings = [
-            settings.vespa_token_id,
-            settings.vespa_token_value,
             settings.gemini_token,
             settings.tenant_name,
             settings.app_name,

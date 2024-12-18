@@ -11,7 +11,7 @@ function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
     const rankerInputs = document.querySelectorAll('input[name="ranker"]');
-    const connectionInputs = document.querySelectorAll('input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"]');
+    const connectionInputs = document.querySelectorAll('input[name="gemini_token"]');
     const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"], textarea[name="schema"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
@@ -193,22 +193,18 @@ function updateRankerSaveButtonState() {
 }
 
 function updateConnectionSaveButtonState() {
-    const vespaTokenID = document.querySelector('input[name="vespa_token_id"]');
-    const vespaTokenValue = document.querySelector('input[name="vespa_token_value"]');
     const geminiToken = document.querySelector('input[name="gemini_token"]');
 
     const enabledButton = document.querySelector('#save-connection');
     const disabledButton = document.querySelector('#save-connection-disabled');
     const unsavedChanges = document.getElementById('connection-unsaved-changes');
 
-  if (!vespaTokenID || !vespaTokenValue || !geminiToken) return;
+  if (!geminiToken) return;
 
-    const isValid = vespaTokenID.value.trim() !== '' &&
-                    vespaTokenValue.value.trim() !== '' &&
-                    geminiToken.value.trim() !== '';
+    const isValid = geminiToken.value.trim() !== '';
 
     // Check if any field has changed from its original value
-    const hasChanges = [vespaTokenID, vespaTokenValue, geminiToken].some(input => {
+    const hasChanges = [geminiToken].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
     });

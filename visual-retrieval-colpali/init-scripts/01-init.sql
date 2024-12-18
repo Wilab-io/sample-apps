@@ -21,8 +21,6 @@ CREATE TABLE user_settings (
     user_id UUID PRIMARY KEY,
     demo_questions TEXT[] DEFAULT ARRAY[]::TEXT[],
     ranker ranker_type NOT NULL DEFAULT 'colpali',
-    vespa_token_id VARCHAR(255),
-    vespa_token_value VARCHAR(255),
     gemini_token VARCHAR(255),
     vespa_cloud_endpoint VARCHAR(255),
     tenant_name VARCHAR(255),

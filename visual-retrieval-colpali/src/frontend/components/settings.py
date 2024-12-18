@@ -237,36 +237,6 @@ def ConnectionSettings(settings: UserSettings = None):
                         H2("Tokens", cls="text-lg font-semibold mb-4"),
                         Div(
                             Label(
-                                "Vespa.ai token ID ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-token-id",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_token_id if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_token_id",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
-                        Div(
-                            Label(
-                                "Vespa.ai token value ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-token-value",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_token_value if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_token_value",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
-                        Div(
-                            Label(
                                 "Gemini API token ",
                                 Span("*", cls="text-red-500"),
                                 htmlFor="gemini-token",

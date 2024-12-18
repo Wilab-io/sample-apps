@@ -799,8 +799,6 @@ async def update_connection_settings(request):
     form = await request.form()
 
     settings = {
-        'vespa_token_id': form.get('vespa_token_id'),
-        'vespa_token_value': form.get('vespa_token_value'),
         'gemini_token': form.get('gemini_token'),
     }
 
