@@ -971,6 +971,10 @@ body {
   min-width: 400px;
 }
 
+.min-w-\[300px\] {
+  min-width: 300px;
+}
+
 .max-w-4xl {
   max-width: 56rem;
 }
@@ -989,6 +993,14 @@ body {
 
 .max-w-screen-xl {
   max-width: 1280px;
+}
+
+.max-w-\[400px\] {
+  max-width: 400px;
+}
+
+.max-w-\[300px\] {
+  max-width: 300px;
 }
 
 .flex-1 {

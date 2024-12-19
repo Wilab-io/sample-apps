@@ -41,7 +41,6 @@ from backend.vespa_app import VespaQueryClient
 from backend.models import UserSettings
 from frontend.app import (
     AboutThisDemo,
-    ChatResult,
     Home,
     Search,
     SearchBox,
@@ -53,9 +52,10 @@ from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
 from backend.init_db import init_default_users, clear_image_queries
-from frontend.components.my_documents import MyDocuments
+from frontend.components.my_documents import MyDocuments, DocumentProcessingModal, DocumentProcessingErrorModal
 from frontend.components.settings import Settings, TabContent
 from backend.deploy import deploy_application_step_1, deploy_application_step_2
+from backend.feed import feed_documents_to_vespa, remove_document_from_vespa
 from frontend.components.deployment import DeploymentModal, DeploymentLoginModal,DeploymentSuccessModal, DeploymentErrorModal
 from frontend.components.image_search import ImageSearchModal
 
@@ -85,6 +85,7 @@ awesomplete_js = Script(
 )
 sselink = Script(src="https://unpkg.com/htmx-ext-sse@2.2.1/sse.js")
 deployment_js = Script(src="/static/js/deployment.js")
+upload_documents_js = Script(src="/static/js/upload-documents.js")
 image_search_js = Script(src="/static/js/image-search.js")
 
 # Get log level from environment variable, default to INFO
@@ -119,6 +120,7 @@ app, rt = fast_app(
         ShadHead(tw_cdn=False, theme_handle=True),
         settings_js,
         deployment_js,
+        upload_documents_js,
         image_search_js,
     ),
 )
@@ -653,7 +655,7 @@ async def get_my_documents(request):
     documents = await app.db.get_user_documents(user_id)
     logger.debug(f"Found {len(documents) if documents else 0} documents")
     return await Layout(
-        Main(await MyDocuments(documents=documents)()),
+        Main(await MyDocuments(documents=documents, app_deployed=app.deployed)()),
         request=request
     )
 
@@ -668,30 +670,54 @@ async def logout(request):
 @rt("/upload-files", methods=["POST"])
 @login_required
 async def upload_files(request):
-    logger.info("Upload files endpoint called")
     user_id = request.session["user_id"]
+    settings: UserSettings = await request.app.db.get_user_settings(user_id)
+    if not settings:
+        logger.error("Settings not found")
+        return {"status": "error", "message": "Settings not found"}
 
     try:
         form = await request.form()
         files = form.getlist("files")
         logger.info(f"Received {len(files)} files")
 
+        doc_names = dict()
+
         for file in files:
             if file.filename:
                 content = await file.read()
-                await app.db.add_user_document(
+                document_id = await app.db.add_user_document(
                     user_id=user_id,
                     document_name=file.filename,
                     file_content=content
                 )
+                doc_names[document_id] = file.filename
 
-        # Update frontend table
-        documents = await app.db.get_user_documents(user_id)
-        return MyDocuments(documents=documents).documents_table()
+        model = app.sim_map_generator.model
+        processor = app.sim_map_generator.processor
+
+        try:
+            result = feed_documents_to_vespa(settings, user_id, model, processor, doc_names)
+            if result["status"] == "error":
+                logger.error(f"Error during vespa feed: {result['message']}")
+                # Clean up documents on error
+                logger.info(f"Deleting {len(doc_names)} documents from database")
+                for doc_id in doc_names.keys():
+                    await app.db.delete_document(doc_id)
+                return result
+            return {"status": "success"}
+
+        except Exception as e:
+            logger.error(f"Error during vespa feed: {str(e)}")
+            # Clean up documents on error
+            logger.info(f"Deleting {len(doc_names)} documents from database")
+            for doc_id in doc_names.keys():
+                await app.db.delete_document(doc_id)
+            return {"status": "error", "message": str(e)}
 
     except Exception as e:
         logger.error(f"Error during file upload: {str(e)}")
-        raise
+        return {"status": "error", "message": str(e)}
 
 @rt("/delete-document/{document_id}", methods=["DELETE"])
 @login_required
@@ -931,6 +957,17 @@ async def get_deployment_success_modal(request):
 @login_required
 async def get_deployment_error_modal(request):
     return DeploymentErrorModal()
+
+@rt("/document-processing-modal")
+@login_required
+async def get_document_processing_modal(request):
+    return DocumentProcessingModal()
+
+@rt("/document-processing-modal/error")
+@login_required
+async def get_document_processing_error_modal(request):
+    message = request.query_params.get("message", None)
+    return DocumentProcessingErrorModal(message=message)
 
 @rt("/detail")
 @login_required

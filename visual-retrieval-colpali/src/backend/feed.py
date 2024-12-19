@@ -25,158 +25,210 @@ logger = logging.getLogger("vespa_app")
 
 
 def feed_documents_to_vespa(settings: UserSettings, user_id: str, model: ColPali, processor: ColPaliProcessor, docNames: dict[str, str]):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    parent_dir = os.path.dirname(os.path.dirname(base_dir))
-    storage_dir = os.path.join(parent_dir, "src/storage/user_documents", user_id)
-    app_dir = os.path.join(parent_dir, "application")
-
-    VESPA_TENANT_NAME = settings.tenant_name
-    VESPA_APPLICATION_NAME = settings.app_name
-    VESPA_INSTANCE_NAME = settings.instance_name
-    VESPA_SCHEMA_NAME = "pdf_page"
-    GEMINI_API_KEY = settings.gemini_token
-
-    # Configure Google Generative AI
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    logger.info(f"Looking for documents in: {storage_dir}")
-
-    if not os.path.exists(storage_dir):
-        raise FileNotFoundError(f"Directory not found: {storage_dir}")
-
-    pdfPaths = [
-        os.path.join(storage_dir, f)
-        for f in os.listdir(storage_dir)
-        if f.endswith(".pdf")
-    ]
-
-    imgPaths = [
-        os.path.join(storage_dir, f)
-        for f in os.listdir(storage_dir)
-        if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")
-    ]
-
-    if not pdfPaths and not imgPaths:
-        raise FileNotFoundError(f"No PDF or image files found in {storage_dir}")
-
-    logger.info(f"Found {len(pdfPaths)} PDF files and {len(imgPaths)} image files to process")
-
-    pdf_pages = []
-
-    # Process PDFs
-    for pdf_file in pdfPaths:
-        logger.debug(f"Processing PDF: {os.path.basename(pdf_file)}")
-        images, texts = get_pdf_images(pdf_file)
-        logger.debug(f"Extracted {len(images)} pages from {os.path.basename(pdf_file)}")
-        for page_no, (image, text) in enumerate(zip(images, texts)):
-            doc_id = os.path.splitext(os.path.basename(pdf_file))[0]
-            title = docNames.get(doc_id, "")
-            static_path = f"/storage/user_documents/{user_id}/{os.path.basename(pdf_file)}"
-            pdf_pages.append(
-                {
-                    "title": title,
-                    "path": pdf_file,
-                    "url": static_path,
-                    "image": image,
-                    "text": text,
-                    "page_no": page_no,
-                }
-            )
-
-    # Process Images
-    for img_file in imgPaths:
-        logger.debug(f"Processing image: {os.path.basename(img_file)}")
-        images, texts = get_image_with_text(img_file)
-        logger.debug(f"Extracted text from {os.path.basename(img_file)}")
-        for page_no, (image, text) in enumerate(zip(images, texts)):
-            doc_id = os.path.splitext(os.path.basename(img_file))[0]
-            title = docNames.get(doc_id, "")
-            static_path = f"/storage/user_documents/{user_id}/{os.path.basename(img_file)}"
-            pdf_pages.append(
-                {
-                    "title": title,
-                    "path": img_file,
-                    "url": static_path,
-                    "image": image,
-                    "text": text,
-                    "page_no": page_no,
-                }
-            )
-
-    logger.info(f"Total processed: {len(pdf_pages)} pages")
-
-    prompt_text, pydantic_model = settings.prompt, GeneratedQueries
-
-    logger.debug(f"Generating queries")
-
-    for pdf in tqdm(pdf_pages):
-        image = pdf.get("image")
-        pdf["queries"] = generate_queries(image, prompt_text, pydantic_model)
-
-    images = [pdf["image"] for pdf in pdf_pages]
-    embeddings = generate_embeddings(images, model, processor)
-
-    logger.info(f"Generated {len(embeddings)} embeddings")
-
-    vespa_feed = []
-    for pdf, embedding in zip(pdf_pages, embeddings):
-        title = pdf["title"]
-        image = pdf["image"]
-        url = pdf["url"]
-        text = pdf.get("text", "")
-        page_no = pdf["page_no"]
-        query_dict = pdf["queries"]
-        questions = [v for k, v in query_dict.items() if "question" in k and v]
-        queries = [v for k, v in query_dict.items() if "query" in k and v]
-        base_64_image = get_base64_image(
-            scale_image(image, 32), add_url_prefix=False
-        )  # Scaled down image to return fast on search (~1kb)
-        base_64_full_image = get_base64_image(image, add_url_prefix=False)
-        embedding_dict = {k: v for k, v in enumerate(embedding)}
-        binary_embedding = float_to_binary_embedding(embedding_dict)
-        # id_hash should be md5 hash of url and page_number
-        id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
-        page = {
-            "id": id_hash,
-            "fields": {
-                "id": id_hash,
-                "title": title,
-                "url": url,
-                "page_number": page_no,
-                "blur_image": base_64_image,
-                "full_image": base_64_full_image,
-                "text": text,
-                "embedding": binary_embedding,
-                "queries": queries,
-                "questions": questions,
-            },
-        }
-        vespa_feed.append(page)
-
-    with open(app_dir + "/vespa_feed.json", "w") as f:
-        vespa_feed_to_save = []
-        for page in vespa_feed:
-            document_id = page["id"]
-            put_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
-            vespa_feed_to_save.append({"put": put_id, "fields": page["fields"]})
-        json.dump(vespa_feed_to_save, f)
-
-    logger.debug(f"Saved vespa feed to {app_dir}/vespa_feed.json")
-
-    current_dir = os.getcwd()
-
     try:
-        logger.debug("Feeding vespa application")
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(os.path.dirname(base_dir))
+        storage_dir = os.path.join(parent_dir, "src/storage/user_documents", user_id)
+        app_dir = os.path.join(parent_dir, "application")
 
-        # Change to application directory
-        os.chdir(app_dir)
+        VESPA_TENANT_NAME = settings.tenant_name
+        VESPA_APPLICATION_NAME = settings.app_name
+        VESPA_INSTANCE_NAME = settings.instance_name
+        VESPA_SCHEMA_NAME = "pdf_page"
+        GEMINI_API_KEY = settings.gemini_token
 
-        subprocess.run(["vespa", "feed", "vespa_feed.json", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"], check=True)
+        # Configure Google Generative AI
+        genai.configure(api_key=GEMINI_API_KEY)
 
-        logger.info(f"Feeding completed successfully!")
-    finally:
-        # Always restore the original working directory
-        os.chdir(current_dir)
+        logger.info(f"Looking for documents in: {storage_dir}")
+
+        if not os.path.exists(storage_dir):
+            return {"status": "error", "message": f"Directory not found: {storage_dir}"}
+
+        pdfPaths = [
+            os.path.join(storage_dir, f)
+            for f in os.listdir(storage_dir)
+            if f.endswith(".pdf") and os.path.splitext(f)[0] in docNames
+        ]
+
+        imgPaths = [
+            os.path.join(storage_dir, f)
+            for f in os.listdir(storage_dir)
+            if (f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg"))
+            and os.path.splitext(f)[0] in docNames
+        ]
+
+        if not pdfPaths and not imgPaths:
+            return {"status": "error", "message": f"No PDF or image files found in {storage_dir}"}
+
+        logger.info(f"Found {len(pdfPaths)} new PDF files and {len(imgPaths)} new image files to process")
+
+        pdf_pages = []
+
+        # Process PDFs
+        for pdf_file in pdfPaths:
+            try:
+                logger.debug(f"Processing PDF: {os.path.basename(pdf_file)}")
+                images, texts = get_pdf_images(pdf_file)
+                logger.debug(f"Extracted {len(images)} pages from {os.path.basename(pdf_file)}")
+                for page_no, (image, text) in enumerate(zip(images, texts)):
+                    doc_id = os.path.splitext(os.path.basename(pdf_file))[0]
+                    title = docNames.get(doc_id, "")
+                    static_path = f"/storage/user_documents/{user_id}/{os.path.basename(pdf_file)}"
+                    pdf_pages.append(
+                        {
+                            "title": title,
+                            "path": pdf_file,
+                            "url": static_path,
+                            "image": image,
+                            "text": text,
+                            "page_no": page_no,
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error processing PDF {pdf_file}: {str(e)}")
+                return {"status": "error", "message": f"Error processing PDF {os.path.basename(pdf_file)}: {str(e)}"}
+
+        # Process Images
+        for img_file in imgPaths:
+            try:
+                logger.debug(f"Processing image: {os.path.basename(img_file)}")
+                images, texts = get_image_with_text(img_file)
+                logger.debug(f"Extracted text from {os.path.basename(img_file)}")
+                for page_no, (image, text) in enumerate(zip(images, texts)):
+                    doc_id = os.path.splitext(os.path.basename(img_file))[0]
+                    title = docNames.get(doc_id, "")
+                    static_path = f"/storage/user_documents/{user_id}/{os.path.basename(img_file)}"
+                    pdf_pages.append(
+                        {
+                            "title": title,
+                            "path": img_file,
+                            "url": static_path,
+                            "image": image,
+                            "text": text,
+                            "page_no": page_no,
+                        }
+                    )
+            except Exception as e:
+                logger.error(f"Error processing image {img_file}: {str(e)}")
+                return {"status": "error", "message": f"Error processing image {os.path.basename(img_file)}: {str(e)}"}
+
+        logger.info(f"Total processed: {len(pdf_pages)} pages")
+
+        prompt_text, pydantic_model = settings.prompt, GeneratedQueries
+
+        logger.debug(f"Generating queries")
+
+        try:
+            for pdf in tqdm(pdf_pages):
+                image = pdf.get("image")
+                pdf["queries"] = generate_queries(image, prompt_text, pydantic_model)
+        except Exception as e:
+            logger.error(f"Error generating queries: {str(e)}")
+            return {"status": "error", "message": f"Error generating queries: {str(e)}"}
+
+        try:
+            images = [pdf["image"] for pdf in pdf_pages]
+            embeddings = generate_embeddings(images, model, processor)
+            logger.info(f"Generated {len(embeddings)} embeddings")
+        except Exception as e:
+            logger.error(f"Error generating embeddings: {str(e)}")
+            return {"status": "error", "message": f"Error generating embeddings: {str(e)}"}
+
+        vespa_feed = []
+        try:
+            for pdf, embedding in zip(pdf_pages, embeddings):
+                title = pdf["title"]
+                image = pdf["image"]
+                url = pdf["url"]
+                text = pdf.get("text", "")
+                page_no = pdf["page_no"]
+                query_dict = pdf["queries"]
+                questions = [v for k, v in query_dict.items() if "question" in k and v]
+                queries = [v for k, v in query_dict.items() if "query" in k and v]
+                base_64_image = get_base64_image(
+                    scale_image(image, 32), add_url_prefix=False
+                )
+                base_64_full_image = get_base64_image(image, add_url_prefix=False)
+                embedding_dict = {k: v for k, v in enumerate(embedding)}
+                binary_embedding = float_to_binary_embedding(embedding_dict)
+                id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
+                page = {
+                    "id": id_hash,
+                    "fields": {
+                        "id": id_hash,
+                        "title": title,
+                        "url": url,
+                        "page_number": page_no,
+                        "blur_image": base_64_image,
+                        "full_image": base_64_full_image,
+                        "text": text,
+                        "embedding": binary_embedding,
+                        "queries": queries,
+                        "questions": questions,
+                    },
+                }
+                vespa_feed.append(page)
+        except Exception as e:
+            logger.error(f"Error preparing Vespa feed: {str(e)}")
+            return {"status": "error", "message": f"Error preparing Vespa feed: {str(e)}"}
+
+        try:
+            with open(app_dir + "/vespa_feed.json", "w") as f:
+                vespa_feed_to_save = []
+                for page in vespa_feed:
+                    document_id = page["id"]
+                    put_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
+                    vespa_feed_to_save.append({"put": put_id, "fields": page["fields"]})
+                json.dump(vespa_feed_to_save, f)
+
+            logger.debug(f"Saved vespa feed to {app_dir}/vespa_feed.json")
+        except Exception as e:
+            logger.error(f"Error saving Vespa feed file: {str(e)}")
+            return {"status": "error", "message": f"Error saving Vespa feed file: {str(e)}"}
+
+        current_dir = os.getcwd()
+
+        try:
+            logger.debug("Feeding vespa application")
+            os.chdir(app_dir)
+            result = subprocess.run(
+                ["vespa", "feed", "vespa_feed.json", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"],
+                check=True,
+                capture_output=True,
+                text=True
+            )
+
+            # Check for specific error messages in the output
+            if "no endpoints found" in result.stderr.lower():
+                logger.error("No Vespa endpoints found. The application might not be deployed or accessible.")
+                return {
+                    "status": "error",
+                    "message": "No Vespa endpoints found. Please make sure the application is deployed and accessible."
+                }
+
+            logger.info(f"Feeding completed successfully!")
+            return {"status": "success"}
+        except subprocess.CalledProcessError as e:
+            error_output = e.stderr if e.stderr else e.stdout
+            logger.error(f"Error feeding Vespa: {error_output}")
+
+            if "no endpoints found" in str(error_output).lower():
+                return {
+                    "status": "error",
+                    "message": "No Vespa endpoints found. Please make sure the application is deployed and accessible."
+                }
+
+            return {
+                "status": "error",
+                "message": f"Error feeding Vespa: {error_output}"
+            }
+        finally:
+            os.chdir(current_dir)
+
+    except Exception as e:
+        logger.error(f"Unexpected error in feed_documents_to_vespa: {str(e)}")
+        return {"status": "error", "message": f"Unexpected error: {str(e)}"}
 
 def get_pdf_images(pdf_path):
     reader = PdfReader(pdf_path)

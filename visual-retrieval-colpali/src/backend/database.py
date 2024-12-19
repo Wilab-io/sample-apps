@@ -128,7 +128,7 @@ class Database:
                 save_path.write_bytes(file_content)
 
                 logger.debug(f"Successfully added document {document_name} with ID {new_document.document_id}")
-                return new_document
+                return str(new_document.document_id)
 
         except Exception as e:
             logger.error(f"Error adding document {document_name}: {str(e)}")
