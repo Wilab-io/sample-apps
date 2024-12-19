@@ -161,7 +161,214 @@ function initializeSettingsPage() {
     }
 
     updateSaveButtonState();
+    updateUserSaveButtonState();
 }
+
+document.addEventListener('click', function(e) {
+    const deleteButton = e.target.closest('.delete-user');
+    if (deleteButton) {
+        const userRow = deleteButton.closest('tr');
+        const userId = deleteButton.getAttribute('data-user-id');
+
+    // Always allow deletion if it's not the admin user
+    const usernameCell = userRow.querySelector('td[name^="username_"]');
+    if (!usernameCell.textContent.trim().includes('admin')) {
+        userRow.remove();
+        updateUserRowNames();
+        updateUserSaveButtonState(true);
+    }
+}
+});
+
+function updateUserRowNames() {
+    const userRows = document.querySelector('#users-container tbody').querySelectorAll('tr');
+    userRows.forEach((row, index) => {
+        // Update username cell
+        const usernameCell = row.querySelector('td[name^="username_"]');
+        if (usernameCell) {
+            usernameCell.setAttribute('name', `username_${index}`);
+        }
+    
+    // Update password cell
+    const passwordCell = row.querySelector('td[name^="password_"]');
+    if (passwordCell) {
+            passwordCell.setAttribute('name', `password_${index}`);
+        }
+    });
+}
+function updateUserSaveButtonState(is_deletion = false) {
+    const usersContainer = document.querySelector('#users-container tbody');
+    const enabledButton = document.querySelector('.enabled-next-users');
+    const disabledButton = document.querySelector('.disabled-next-users');
+    const unsavedChanges = document.getElementById('unsaved-changes-users');
+    const inputs = usersContainer.querySelectorAll('input');
+    var hasChanges = false;
+    var hasIncompleteNewUser = false;
+
+    // Handle deletion case first
+    if (is_deletion) {
+        hasChanges = true;
+    } else {
+        hasChanges = Array.from(inputs).some(input => {
+            const originalValue = input.getAttribute('data-original') || '';
+            return input.value.trim() !== originalValue.trim();
+        });
+    }
+
+    // Check for incomplete new user entries
+    const userRows = document.querySelectorAll('#users-container tbody tr');
+    userRows.forEach((row) => {
+        if (row.getAttribute('data-user-id') === 'new') {
+            const usernameInput = row.querySelector('td[name^="username_"] input');
+            const passwordInput = row.querySelector('td[name^="password_"] input');
+            
+            if (!usernameInput?.value.trim() || !passwordInput?.value.trim()) {
+                hasIncompleteNewUser = true;
+            }
+        }
+    });
+    
+    if (hasChanges && !hasIncompleteNewUser) {
+        unsavedChanges.classList.remove('hidden');
+        enabledButton.classList.remove('hidden');
+        disabledButton.classList.add('hidden');
+    } else {
+        enabledButton.classList.add('hidden');
+        disabledButton.classList.remove('hidden');
+        if (!hasChanges) {
+            unsavedChanges.classList.add('hidden');
+        }
+    }
+    
+    const form = document.createElement('form');
+    let userIndex = 0;
+    userRows.forEach((row) => {
+        const usernameCell = row.querySelector('td[name^="username_"]');
+        const passwordCell = row.querySelector('td[name^="password_"]');
+        const userIdCell = row.querySelector('td[name^="user_id_"]');
+        
+        const usernameInput = usernameCell.querySelector('input');
+        const passwordInput = passwordCell.querySelector('input');
+        const username = usernameInput ? usernameInput.value.trim() : usernameCell.textContent.trim();
+        const password = passwordInput ? passwordInput.value.trim() : usernameCell.textContent.trim();
+        const userId = userIdCell ? userIdCell.textContent.trim() : '';
+        
+        if (username && password) {
+            const usernameFormInput = document.createElement('input');
+            usernameFormInput.type = 'hidden';
+            usernameFormInput.name = `username_${userIndex}`;
+            usernameFormInput.value = username;
+            form.appendChild(usernameFormInput);
+
+            const passwordFormInput = document.createElement('input'); 
+            passwordFormInput.type = 'hidden';
+            passwordFormInput.name = `password_${userIndex}`;
+            passwordFormInput.value = password;
+            form.appendChild(passwordFormInput);
+
+            const userIdFormInput = document.createElement('input');
+            userIdFormInput.type = 'hidden';
+            userIdFormInput.name = `user_id_${userIndex}`;
+            userIdFormInput.value = userId;
+            form.appendChild(userIdFormInput);
+            userIndex++;
+        }
+    });
+    enabledButton.setAttribute('hx-vals', JSON.stringify(Object.fromEntries(new FormData(form))));
+}
+
+document.addEventListener('input', function (e) {
+    const input = e.target;
+    if (input.closest('#users-container')) {
+        updateUserSaveButtonState();
+    }
+});
+document.addEventListener('click', function (e) {
+    // Detectar clic en el botón "Add User"
+    if (e.target.id === 'add-user') {
+        const usersContainer = document.getElementById('users-container');
+        const tableBody = document.querySelector('#users-container tbody');
+
+        // Create new row
+        const newRow = document.createElement('tr');
+        newRow.setAttribute('data-user-id', 'new');
+
+        // Create cells
+        const usernameCell = document.createElement('td');
+        usernameCell.setAttribute('name', `username_${tableBody.children.length}`);
+        usernameCell.className = 'p-4';
+
+        const passwordCell = document.createElement('td'); 
+        passwordCell.setAttribute('name', `password_${tableBody.children.length}`);
+        passwordCell.className = 'p-4';
+
+        const actionsCell = document.createElement('td');
+        actionsCell.className = 'flex items-center mb-2 p-4';
+
+        // Create inputs
+        const usernameInput = document.createElement('input');
+        usernameInput.className = 'flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background';
+        usernameInput.type = 'text';
+
+        // Create password container div for input and eye button
+        const passwordContainer = document.createElement('div');
+        passwordContainer.className = 'flex items-center w-full';
+
+        const passwordInput = document.createElement('input');
+        passwordInput.className = 'flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background';
+        passwordInput.type = 'password';
+
+        const eyeButton = document.createElement('button');
+        eyeButton.className = 'ml-2 p-2 rounded-full transition-colors';
+        eyeButton.type = 'button';
+        eyeButton.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>
+                <circle cx="12" cy="12" r="3"/>
+            </svg>
+        `;
+
+        eyeButton.addEventListener('mousedown', () => {
+            passwordInput.type = 'text';
+        });
+        eyeButton.addEventListener('mouseup', () => {
+            passwordInput.type = 'password';
+        });
+        eyeButton.addEventListener('mouseleave', () => {
+            passwordInput.type = 'password';
+        });
+
+        const deleteButton = document.createElement('button');
+        deleteButton.className = 'delete-user ml-2';
+        deleteButton.setAttribute('variant', 'ghost');
+        deleteButton.setAttribute('size', 'icon');
+        deleteButton.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash-2">
+                <path d="M3 6h18"></path>
+                <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+        `;
+
+        usernameCell.appendChild(usernameInput);
+        passwordContainer.appendChild(passwordInput);
+        passwordContainer.appendChild(eyeButton);
+        passwordCell.appendChild(passwordContainer);
+        actionsCell.appendChild(deleteButton);
+
+        newRow.appendChild(usernameCell);
+        newRow.appendChild(passwordCell);
+        newRow.appendChild(actionsCell);
+
+        tableBody.appendChild(newRow);
+        usernameInput.focus();
+
+        updateUserSaveButtonState(false);
+    }
+});
+
 
 document.addEventListener('htmx:afterSwap', function(event) {
     if (event.detail.target.id === 'settings-content') {
