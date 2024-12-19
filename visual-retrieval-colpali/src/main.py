@@ -724,6 +724,7 @@ async def get(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    users = await request.app.db.get_users_list()
     app_configured = await request.app.db.is_application_configured(user_id)
 
     logger.debug(f"Application configuration check: {app_configured}")
@@ -732,6 +733,7 @@ async def get(request):
         Settings(
             active_tab=tab,
             settings=settings,
+            users=users,
             username=request.session["username"],
             appConfigured=app_configured,
         ),
@@ -752,15 +754,34 @@ async def get_settings_content(request):
         tab = "demo-questions"
 
     settings = await request.app.db.get_user_settings(user_id)
+    users = await request.app.db.get_users_list() if tab == "users" else None
     app_configured = await request.app.db.is_application_configured(user_id)
 
     logger.debug(f"Application configuration check: {app_configured}")
     return TabContent(
         tab,
-        settings,
+        settings=settings,
+        users=users,
         username=request.session["username"],
         appConfigured=app_configured
     )
+
+@rt("/api/settings/users", methods=["POST"])
+@login_required
+async def update_users(request):
+    """Update users based on form data"""
+    logger = logging.getLogger("vespa_app")
+    form = await request.form()
+
+    try:
+        await request.app.db.update_users(dict(form))
+        return Redirect("/settings?tab=users")
+    except ValueError as e:
+        logger.error(f"Validation error updating users: {e}")
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception as e:
+        logger.error(f"Error updating users: {e}")
+        return JSONResponse({"error": "Failed to update users"}, status_code=500)
 
 @rt("/api/settings/demo-questions", methods=["POST"])
 @login_required
