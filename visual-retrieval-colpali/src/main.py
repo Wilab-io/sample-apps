@@ -700,6 +700,16 @@ async def delete_document(request, document_id: str):
     user_id = request.session["user_id"]
 
     try:
+        # Get settings for Vespa removal
+        settings = await request.app.db.get_user_settings(user_id)
+        if not settings:
+            logger.error("Settings not found")
+            return {"status": "error", "message": "Settings not found"}
+
+        # First remove from Vespa
+        remove_document_from_vespa(settings, document_id)
+
+        # Then delete from database and filesystem
         await app.db.delete_document(document_id)
 
         # Return updated table

@@ -285,3 +285,47 @@ def generate_embeddings(images, model, processor, batch_size=1) -> np.ndarray:
     # Stack all embeddings into a single numpy array
     all_embeddings = np.stack(embeddings_list, axis=0)
     return all_embeddings
+
+def remove_document_from_vespa(settings: UserSettings, document_id: str):
+    """Remove a document from Vespa by ID"""
+    logger = logging.getLogger("vespa_app")
+    logger.info(f"Removing document {document_id} from Vespa")
+
+    VESPA_TENANT_NAME = settings.tenant_name
+    VESPA_APPLICATION_NAME = settings.app_name
+    VESPA_INSTANCE_NAME = settings.instance_name
+    VESPA_SCHEMA_NAME = "pdf_page"
+
+    # Get application directory path
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(os.path.dirname(base_dir))
+    app_dir = os.path.join(parent_dir, "application")
+
+    # Store current directory
+    current_dir = os.getcwd()
+
+    try:
+        logger.debug("Removing document from Vespa")
+
+        # Change to application directory
+        os.chdir(app_dir)
+
+        # Construct the full document ID
+        vespa_doc_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
+
+        # Run the remove command
+        subprocess.run(
+            ["vespa", "document", "remove", vespa_doc_id, "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"],
+            check=True
+        )
+
+        logger.info(f"Successfully removed document {document_id} from Vespa")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to remove document from Vespa: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"Error removing document from Vespa: {str(e)}")
+        raise
+    finally:
+        # Always restore the original working directory
+        os.chdir(current_dir)
