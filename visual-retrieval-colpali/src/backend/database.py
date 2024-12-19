@@ -251,66 +251,7 @@ class Database:
                 {"user_id": str(user.user_id), "username": user.username, "password": user.password_hash}
                 for user in users
             ]
-        """
-        
-    async def update_users(self, users_data: dict) -> None:
-        Update and add users based on provided dictionary data.
-        logger = logging.getLogger("vespa_app")
-
-        users = {
-            key.split("_")[1]: {
-                "username": users_data.get(f"username_{key.split('_')[1]}"),
-                "password": users_data.get(f"password_{key.split('_')[1]}"),
-                "user_id": users_data.get(f"user_id_{key.split('_')[1]}"),
-            }
-            for key in users_data.keys()
-            if key.startswith("username_")
-        }
-
-        input_user_ids = {user["user_id"] for user in users.values() if user["user_id"]}
-
-        async with self.get_session() as session:
-            db_users = await session.execute(select(User))
-            db_users = db_users.scalars().all()
-
-            db_user_ids = {str(user.user_id) for user in db_users}
-
-            users_to_delete = db_user_ids - input_user_ids
-            for user_id in users_to_delete:
-                try:
-                    await session.execute(delete(User).where(User.user_id == UUID(user_id)))
-                    logger.info(f"Deleted user with ID: {user_id}")
-                except Exception as e:
-                    logger.error(f"Error deleting user {user_id}: {e}")
-
-            for user_data in users.values():
-                username = user_data.get("username")
-                password = user_data.get("password")
-                user_id = user_data.get("user_id")
-
-                if not username or not password:
-                    logger.warning(f"Invalid data for user {username}, skipping.")
-                    continue
-
-                if username in {user.username for user in db_users}:
-                    logger.info(f"Username {username} already exists, skipping.")
-                    continue
-
-                try:
-                    new_user = User(username=username, password_hash=hash_password(password))
-                    session.add(new_user)
-                    logger.info(f"Created user: {username}")
-                except Exception as e:
-                    logger.error(f"Error creating user {username}: {e}")
-
-            try:
-                await session.commit()
-                logger.info("Users updated successfully")
-            except Exception as e:
-                logger.error(f"Error committing user updates: {e}")
-                raise
-
-        """
+       
     async def delete_users(self, user_ids: set, session, logger) -> None:
         """Delete users and their associated data."""
         for user_id in user_ids:
@@ -349,7 +290,6 @@ class Database:
             except Exception as e:
                 logger.error(f"Error creating user {username}: {e}")
 
-
     async def update_users(self, users_data: dict) -> None:
         """Update users by deleting and creating as necessary."""
         logger = logging.getLogger("vespa_app")
@@ -383,8 +323,6 @@ class Database:
             except Exception as e:
                 logger.error(f"Error committing user updates: {e}")
                 raise
-
-
 
     async def is_application_configured(self, user_id: str) -> bool:
         documents = await self.get_user_documents(UUID(user_id))
