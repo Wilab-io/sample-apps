@@ -184,7 +184,7 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
     parent_dir = os.path.dirname(os.path.dirname(base_dir))
     app_dir = os.path.join(parent_dir, "application")
 
-    copy_api_key_file(parent_dir, VESPA_TENANT_NAME)
+    copy_api_key_file(parent_dir, VESPA_TENANT_NAME, user_id)
 
     try:
         logger.debug("Generating services.xml")
@@ -317,24 +317,29 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
         logger.error(f"Deployment failed: {str(e)}")
         raise
 
-def copy_api_key_file(parent_dir, tenant_name):
-    storage_dir = os.path.join(parent_dir, "application")
-    # Find any .pem file in the given directory
-    api_key_src = next((f for f in os.listdir(storage_dir) if f.endswith('.pem')), None)
-    if api_key_src:
-        api_key_src = os.path.join(storage_dir, api_key_src)
-    else:
-        raise FileNotFoundError("No .pem file found in application directory")
+def copy_api_key_file(parent_dir, tenant_name, user_id: str):
+    from pathlib import Path
+    import shutil
 
-    api_key_dest = os.path.expanduser("~/.vespa")
-    os.makedirs(api_key_dest, exist_ok=True)
+    user_key_dir = Path("storage/user_keys") / str(user_id)
+
+    # Find the user's .pem file
+    pem_files = list(user_key_dir.glob("*.pem"))
+    if not pem_files:
+        raise FileNotFoundError(f"No .pem file found in user directory {user_key_dir}")
+
+    api_key_src = pem_files[0]  # Use the first .pem file found
+
+    # Create the vespa config directory if it doesn't exist
+    api_key_dest = Path.home() / ".vespa"
+    api_key_dest.mkdir(parents=True, exist_ok=True)
 
     dest_filename = f"{tenant_name}.api-key.pem"
-    dest_path = os.path.join(api_key_dest, dest_filename)
+    dest_path = api_key_dest / dest_filename
 
-    if os.path.exists(api_key_src):
-        import shutil
+    try:
         shutil.copy2(api_key_src, dest_path)
         logger.info(f"Copied API key from {api_key_src} to {dest_path}")
-    else:
-        logger.warning(f"API key file not found at {api_key_src}")
+    except Exception as e:
+        logger.error(f"Failed to copy API key: {str(e)}")
+        raise

@@ -12,6 +12,7 @@ function initializeSettingsPage() {
     const addButton = document.getElementById('add-question');
     const rankerInputs = document.querySelectorAll('input[name="ranker"]');
     const connectionInputs = document.querySelectorAll('input[name="gemini_token"]');
+    const apiKeyFile = document.querySelector('input[name="api_key_file"]');
     const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"], textarea[name="schema"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
@@ -38,6 +39,10 @@ function initializeSettingsPage() {
         input.setAttribute('data-original', input.value);
         input.addEventListener('input', updateConnectionSaveButtonState);
     });
+
+    if (apiKeyFile) {
+        apiKeyFile.addEventListener('change', updateConnectionSaveButtonState);
+    }
 
     if (connectionInputs.length > 0) {
         updateConnectionSaveButtonState();
@@ -194,20 +199,22 @@ function updateRankerSaveButtonState() {
 
 function updateConnectionSaveButtonState() {
     const geminiToken = document.querySelector('input[name="gemini_token"]');
+    const apiKeyFile = document.querySelector('input[name="api_key_file"]');
 
     const enabledButton = document.querySelector('#save-connection');
     const disabledButton = document.querySelector('#save-connection-disabled');
     const unsavedChanges = document.getElementById('connection-unsaved-changes');
 
-  if (!geminiToken) return;
+    if (!geminiToken || !apiKeyFile) return;
 
-    const isValid = geminiToken.value.trim() !== '';
+    const isValid = geminiToken.value.trim() !== '' &&
+                    (apiKeyFile.files.length > 0 || apiKeyFile.hasAttribute('data-has-file'));
 
     // Check if any field has changed from its original value
     const hasChanges = [geminiToken].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
-    });
+    }) || apiKeyFile.files.length > 0;
 
     if (isValid) {
         enabledButton.classList.remove('hidden');

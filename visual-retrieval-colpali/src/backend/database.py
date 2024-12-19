@@ -232,9 +232,9 @@ class Database:
             await session.commit()
 
     async def is_application_configured(self, user_id: str) -> bool:
-        documents = await self.get_user_documents(UUID(user_id))
-        has_documents = len(documents) > 0
+        from pathlib import Path
 
+        # Check for settings
         settings = await self.get_user_settings(user_id)
         if not settings:
             return False
@@ -249,7 +249,14 @@ class Database:
 
         has_required_settings = all(setting is not None for setting in required_settings)
 
-        return has_documents and has_required_settings
+        # Check for API key file
+        user_key_dir = Path("storage/user_keys") / str(user_id)
+        uploaded_api_key = False
+        if user_key_dir.exists():
+            pem_files = list(user_key_dir.glob("*.pem"))
+            uploaded_api_key = len(pem_files) > 0
+
+        return has_required_settings and uploaded_api_key
 
     @staticmethod
     def get_default_prompt() -> str:

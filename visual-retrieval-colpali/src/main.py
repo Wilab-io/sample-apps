@@ -838,6 +838,26 @@ async def update_connection_settings(request):
         'gemini_token': form.get('gemini_token'),
     }
 
+    # Handle API key file upload
+    api_key_file = form.get("api_key_file")
+    if api_key_file and hasattr(api_key_file, "filename"):
+        from pathlib import Path
+        import shutil
+
+        # Create user's key directory if it doesn't exist
+        user_key_dir = Path("storage/user_keys") / str(user_id)
+        user_key_dir.mkdir(parents=True, exist_ok=True)
+
+        # Remove any existing .pem files
+        for existing_file in user_key_dir.glob("*.pem"):
+            existing_file.unlink()
+
+        # Save the new file
+        file_content = await api_key_file.read()
+        new_file_path = user_key_dir / f"{api_key_file.filename}"
+        with open(new_file_path, "wb") as f:
+            f.write(file_content)
+
     await request.app.db.update_settings(user_id, settings)
 
     return Redirect("/settings?tab=connection")

@@ -109,7 +109,7 @@ class MyDocuments:
                                 cls="size-5 cursor-pointer ml-6 dark:brightness-0 dark:invert"
                             ),
                             P(
-                                "The app must be deployed to upload documents. Supported formats: PDF, PNG, JPG, JPEG. Other formats will be ignored.",
+                                "The app must be deployed to upload documents.\nSupported formats: PDF, PNG, JPG, JPEG.\nOther formats will be ignored.",
                                 cls="absolute invisible group-hover:visible bg-white dark:bg-gray-900 text-black dark:text-white p-3 rounded-[10px] text-sm -mt-12 ml-2 shadow-sm min-w-[300px] max-w-[300px]"
                             ),
                             cls="relative inline-block group"
