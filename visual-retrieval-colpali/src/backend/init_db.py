@@ -1,6 +1,5 @@
 from sqlalchemy import select, text
-from .database import engine, async_session
-from .auth import hash_password
+from .database import engine, async_session, Database
 from .models import User, Base
 import logging
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,7 +21,7 @@ async def clear_image_queries(logger: logging.Logger):
         logger.error(f"Failed to clear image_queries table: {e}")
         raise
 
-async def init_default_users(logger: logging.Logger):
+async def init_default_users(logger: logging.Logger, db: Database):
     try:
         # First create tables if they don't exist
         async with engine.begin() as conn:
@@ -42,38 +41,15 @@ async def init_default_users(logger: logging.Logger):
 
                 if user is None:
                     logger.info("Creating admin user...")
-                    admin_user = User(
-                        username="admin",
-                        password_hash=hash_password("1")
-                    )
-                    session.add(admin_user)
-                    await session.commit()
+                    admin_data = {
+                        "username_1": "admin",
+                        "password_1": "1",
+                        "user_id_1": None
+                    }
+                    await db.update_users(admin_data)
                     logger.info("Admin user created successfully")
                 else:
                     logger.info("Admin user already exists")
-
-            except Exception as e:
-                logger.error(f"Error in init_default_users: {e}")
-                raise
-
-        async with async_session() as session:
-            try:
-                result = await session.execute(
-                    select(User).where(User.username == "demo")
-                )
-                user = result.scalar_one_or_none()
-
-                if user is None:
-                    logger.info("Creating demo user...")
-                    demo_user = User(
-                        username="demo",
-                        password_hash=hash_password("1")
-                    )
-                    session.add(demo_user)
-                    await session.commit()
-                    logger.info("Demo user created successfully")
-                else:
-                    logger.info("Demo user already exists")
 
             except Exception as e:
                 logger.error(f"Error in init_default_users: {e}")
