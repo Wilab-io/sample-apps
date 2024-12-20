@@ -97,7 +97,6 @@ def _get_tab_content(active_tab: str, settings: UserSettings = None, users: list
     elif active_tab == "prompt":
         return PromptSettings(settings=settings)
     elif active_tab == "users":
-        logger.info(f"Users: {users}")
         return UsersSettings(users=users)
     return ""
 
@@ -496,9 +495,6 @@ def PromptSettings(settings: UserSettings = None):
 def UsersSettings(users: list = None):
     users = users if users else []
 
-    # Añadir un usuario "nuevo" con valores por defecto
-    #users.append({"username": "", "password": "", "user_id": None, "new": True})
-
     return Div(
         Div(
             H2("Users settings", cls="text-xl font-semibold px-4 mb-4"),
@@ -516,7 +512,6 @@ def UsersSettings(users: list = None):
                 *[
                     TableRow(
                         TableCell(
-                            # Mostrar el nombre de usuario o un input si es un usuario nuevo
                             user.get("username", ""),
                             cls="p-4",
                             name=f"username_{i}",
