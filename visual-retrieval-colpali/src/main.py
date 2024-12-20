@@ -743,12 +743,7 @@ async def delete_document(request, document_id: str):
             return vespa_result
 
         await app.db.delete_document(document_id)
-        documents = await app.db.get_user_documents(user_id)
-
-        return {
-            "status": "success",
-            "content": str(MyDocuments(documents=documents).documents_table())
-        }
+        return {"status": "success"}
 
     except Exception as e:
         logger.error(f"Error deleting document: {str(e)}")
