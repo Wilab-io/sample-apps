@@ -1,6 +1,5 @@
 from sqlalchemy import select, text
 from .database import engine, async_session, Database
-from .auth import hash_password
 from .models import User, Base
 import logging
 from sqlalchemy.exc import SQLAlchemyError

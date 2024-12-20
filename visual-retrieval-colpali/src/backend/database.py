@@ -29,13 +29,6 @@ async_session = sessionMaker(engine, class_=AsyncSession, expire_on_commit=False
 
 STORAGE_DIR = Path("storage/user_documents")
 
-def verify_password(password: str, hashed: str, logger) -> bool:
-    try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
-    except Exception as e:
-        logger.error(f"Error verifying password: {e}")
-        return False
-
 class Database:
     def __init__(self):
         self.session_maker = async_session
@@ -252,43 +245,47 @@ class Database:
                 for user in users
             ]
        
-    async def delete_users(self, user_ids: set, session, logger) -> None:
+    async def delete_users(self, user_ids: set) -> None:
         """Delete users and their associated data."""
-        for user_id in user_ids:
-            user_id_uuid = UUID(user_id)
-            try:
-                await session.execute(delete(UserSettings).where(UserSettings.user_id == user_id_uuid))
-                logger.info(f"Deleted settings for user ID: {user_id}")
-            
-                await session.execute(delete(UserDocument).where(UserDocument.user_id == user_id_uuid))
-                logger.info(f"Deleted documents for user ID: {user_id}")
+        logger = logging.getLogger("vespa_app")
+        async with self.get_session() as session:
+            for user_id in user_ids:
+                user_id_uuid = UUID(user_id)
+                try:
+                    await session.execute(delete(UserSettings).where(UserSettings.user_id == user_id_uuid))
+                    logger.info(f"Deleted settings for user ID: {user_id}")
+                    await session.execute(delete(UserDocument).where(UserDocument.user_id == user_id_uuid))
+                    logger.info(f"Deleted documents for user ID: {user_id}")
 
-                await session.execute(delete(User).where(User.user_id == user_id_uuid))
-                logger.info(f"Deleted user with ID: {user_id}")
-            except Exception as e:
-                logger.error(f"Error deleting user {user_id}: {e}")
+                    await session.execute(delete(User).where(User.user_id == user_id_uuid))
+                    logger.info(f"Deleted user with ID: {user_id}")
+                except Exception as e:
+                    logger.error(f"Error deleting user {user_id}: {e}")
 
 
-    async def create_users(self, users: dict, existing_usernames: set, session, logger) -> None:
+    async def create_users(self, users: dict, existing_usernames: set) -> None:
         """Create new users based on input data."""
-        for user_data in users.values():
-            username = user_data.get("username")
-            password = user_data.get("password")
+        logger = logging.getLogger("vespa_app")
 
-            if not username or not password:
-                logger.warning(f"Invalid data for user {username}, skipping.")
-                continue
+        async with self.get_session() as session:
+            for user_data in users.values():
+                username = user_data.get("username")
+                password = user_data.get("password")
 
-            if username in existing_usernames:
-                logger.info(f"Username {username} already exists, skipping.")
-                continue
+                if not username or not password:
+                    logger.warning(f"Invalid data for user {username}, skipping.")
+                    continue
 
-            try:
-                new_user = User(username=username, password_hash=hash_password(password))
-                session.add(new_user)
-                logger.info(f"Created user: {username}")
-            except Exception as e:
-                logger.error(f"Error creating user {username}: {e}")
+                if username in existing_usernames:
+                    logger.info(f"Username {username} already exists, skipping.")
+                    continue
+
+                try:
+                    new_user = User(username=username, password_hash=hash_password(password))
+                    session.add(new_user)
+                    logger.info(f"Created user: {username}")
+                except Exception as e:
+                    logger.error(f"Error creating user {username}: {e}")
 
     async def update_users(self, users_data: dict) -> None:
         """Update users by deleting and creating as necessary."""
@@ -313,9 +310,9 @@ class Database:
 
             users_to_delete = db_user_ids - input_user_ids
 
-            await self.delete_users(users_to_delete, session, logger)
+            await self.delete_users(users_to_delete)
 
-            await self.create_users(users, existing_usernames, session, logger)
+            await self.create_users(users, existing_usernames)
 
             try:
                 await session.commit()

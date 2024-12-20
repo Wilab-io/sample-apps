@@ -9,9 +9,6 @@ from shad4fast import (
     TableHeader,
     TableRow,
 )
-import logging
-
-logger = logging.getLogger(__name__)
 
 def TabButton(text: str, value: str, active_tab: str):
     is_active = value == active_tab
