@@ -1,7 +1,15 @@
 from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea
 from lucide_fasthtml import Lucide
-from backend.models import UserSettings
 from pathlib import Path
+from backend.models import UserSettings, User
+from shad4fast import (
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
+)
 
 def TabButton(text: str, value: str, active_tab: str):
     is_active = value == active_tab
@@ -30,6 +38,7 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
             TabButton("Connection", "connection", active_tab),
             TabButton("Application package", "application-package", active_tab),
             TabButton("Prompt", "prompt", active_tab) if username == "admin" else None,
+            TabButton("Users", "users", active_tab) if username == "admin" else None,
             cls="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-[10px]",
         ),
         Div(
@@ -64,17 +73,17 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
         id="tab-buttons"
     )
 
-def TabContent(active_tab: str, settings: UserSettings = None, username: str = None, appConfigured: bool = False):
+def TabContent(active_tab: str, settings: UserSettings = None, users: list[User] = None, username: str = None, appConfigured: bool = False):
     return Div(
         TabButtons(active_tab, username, appConfigured),
         Div(
-            _get_tab_content(active_tab, settings),
+            _get_tab_content(active_tab, settings, users),
             cls="bg-white dark:bg-gray-900 p-4 rounded-[10px] shadow-md w-full border border-gray-200 dark:border-gray-700",
         ),
         id="settings-content"
     )
 
-def _get_tab_content(active_tab: str, settings: UserSettings = None):
+def _get_tab_content(active_tab: str, settings: UserSettings = None, users: list[User] = None):
     if active_tab == "demo-questions":
         return DemoQuestions(questions=settings.demo_questions if settings else [])
     elif active_tab == "ranker":
@@ -85,6 +94,8 @@ def _get_tab_content(active_tab: str, settings: UserSettings = None):
         return ApplicationPackageSettings(settings=settings)
     elif active_tab == "prompt":
         return PromptSettings(settings=settings)
+    elif active_tab == "users":
+        return UsersSettings(users=users)
     return ""
 
 def DemoQuestions(questions: list[str]):
@@ -489,11 +500,108 @@ def PromptSettings(settings: UserSettings = None):
         cls="space-y-4"
     )
 
-def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, username: str = None, appConfigured: bool = False):
+
+def UsersSettings(users: list = None):
+    users = users if users else []
+
+    return Div(
+        Div(
+            H2("Users settings", cls="text-xl font-semibold px-4 mb-4"),
+            cls="border-b border-gray-200 dark:border-gray-700 -mx-4 mb-6"
+        ),
+        Table(
+            TableHeader(
+                TableRow(
+                    TableHead("Username", cls="text-left p-4"),
+                    TableHead("Password", cls="text-left p-4"),
+                    TableHead("Actions", cls="text-left p-4"),
+                )
+            ),
+            TableBody(
+                *[
+                    TableRow(
+                        TableCell(
+                            user.get("username", ""),
+                            cls="p-4",
+                            name=f"username_{i}",
+                            **{"data-original": user.get("username", "")}
+                        ),
+                        TableCell(
+                            Input(
+                                type="hidden",
+                                placeholder=user.get("password", ""),
+                                value=user.get("password", ""),
+                                name=f"password_{i}",
+                                **{"data-original": user.get("password", "")}
+                            ),
+                            "********",
+                            name=f"password_{i}",
+                            cls="p-4"
+                        ),
+                        TableCell(
+                            user.get("user_id", None),
+                            cls="p-4",
+                            name=f"user_id_{i}",
+                            hidden=True
+                        ),
+                        TableCell(
+                            Button(
+                                Lucide("trash-2", size=20),
+                                variant="ghost",
+                                size="icon",
+                                cls="delete-user ml-2" if not user.get("new") else "hidden",
+                                **{"data-user-id": user.get("user_id", None)}
+                            ) if (i > 0 and not user.get("username") == "admin") else None,
+                            cls="flex items-center mb-2"
+                        ),
+                    **{"data-user-id": user.get("user_id")}
+                    )
+                    for i, user in enumerate(users)
+                ]
+            ),
+            id="users-container",
+            cls="w-full"
+        ),
+        Button(
+            "Add User",
+            id="add-user",
+            variant="default",
+            cls="mt-1 ml-auto rounded-[10px] border border-gray-200 dark:border-gray-700 px-3 py-2"
+        ),
+        Div(
+            Div(
+                P(
+                    "Unsaved changes",
+                    cls="text-red-500 text-sm hidden text-right mt-6",
+                    id="unsaved-changes-users"
+                ),
+                cls="flex-grow self-center"
+            ),
+            Button(
+                "Save",
+                cls="mt-6 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 px-6 py-2 rounded-[10px] disabled-next-users",
+                id="save-users-disabled",
+                disabled=True,
+            ),
+            Button(
+                "Save",
+                cls="mt-6 bg-black dark:bg-black text-white px-6 py-2 rounded-[10px] hover:opacity-80 enabled-next-users hidden",
+                id="save-users",
+                hx_post="/api/settings/users",
+                hx_trigger="click",
+            ),
+            cls="flex items-center w-full gap-4"
+        ),
+        cls="space-y-4"
+    )
+
+
+
+def Settings(active_tab: str = "demo-questions", settings: UserSettings = None, users: list[User] = None, username: str = None, appConfigured: bool = False):
     return Main(
         H1("Settings", cls="text-4xl font-bold mb-8 text-center"),
         Div(
-            TabContent(active_tab, settings, username, appConfigured),
+            TabContent(active_tab, settings, users, username, appConfigured),
             cls="w-full max-w-4xl mx-auto"
         ),
         cls="container mx-auto px-4 py-8 w-full min-h-0"
