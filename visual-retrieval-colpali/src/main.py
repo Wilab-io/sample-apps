@@ -175,7 +175,7 @@ async def startup_event():
     try:
         os.environ["USE_MTLS"] = "true"
         await clear_image_queries(logger)
-        await init_default_users(logger)
+        await init_default_users(logger, app.db)
     except SystemExit:
         logger.error("Application Startup Failed")
         raise RuntimeError("Failed to initialize application")

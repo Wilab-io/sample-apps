@@ -1,5 +1,5 @@
 from sqlalchemy import select, text
-from .database import engine, async_session
+from .database import engine, async_session, Database
 from .auth import hash_password
 from .models import User, Base
 import logging
@@ -22,7 +22,7 @@ async def clear_image_queries(logger: logging.Logger):
         logger.error(f"Failed to clear image_queries table: {e}")
         raise
 
-async def init_default_users(logger: logging.Logger):
+async def init_default_users(logger: logging.Logger, db: Database):
     try:
         # First create tables if they don't exist
         async with engine.begin() as conn:
@@ -46,8 +46,7 @@ async def init_default_users(logger: logging.Logger):
                         username="admin",
                         password_hash=hash_password("1")
                     )
-                    session.add(admin_user)
-                    await session.commit()
+                    await db.add_user(admin_user)
                     logger.info("Admin user created successfully")
                 else:
                     logger.info("Admin user already exists")
