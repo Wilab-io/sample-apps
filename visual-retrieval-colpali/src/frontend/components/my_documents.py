@@ -61,7 +61,8 @@ class MyDocuments:
                             Button(
                                 Lucide("trash-2", cls="dark:brightness-0 dark:invert", size='20'),
                                 type="button",
-                                cls="hover:opacity-80",
+                                disabled=not self.app_deployed,
+                                cls="hover:opacity-80 cursor-pointer" if self.app_deployed else "opacity-50 cursor-not-allowed",
                                 hx_delete=f"/delete-document/{doc.document_id}",
                                 hx_target="#documents-list",
                                 hx_confirm=f"Are you sure you want to delete {doc.document_name}?"
@@ -109,7 +110,7 @@ class MyDocuments:
                                 cls="size-5 cursor-pointer ml-6 dark:brightness-0 dark:invert"
                             ),
                             P(
-                                "The app must be deployed to upload documents.\nSupported formats: PDF, PNG, JPG, JPEG.\nOther formats will be ignored.",
+                                "The app must be deployed to upload or delete documents.\nSupported formats: PDF, PNG, JPG, JPEG.\nOther formats will be ignored.",
                                 cls="absolute invisible group-hover:visible bg-white dark:bg-gray-900 text-black dark:text-white p-3 rounded-[10px] text-sm -mt-12 ml-2 shadow-sm min-w-[300px] max-w-[300px]"
                             ),
                             cls="relative inline-block group"
@@ -136,7 +137,7 @@ def DocumentProcessingModal():
                     cls="text-xl font-semibold mb-2 text-gray-900 dark:text-white"
                 ),
                 P(
-                    "Processing documents' information with AI to feed Vespa",
+                    "The AI is processing your documents and feeding them into Vespa Cloud",
                     cls="text-gray-500 dark:text-gray-400"
                 ),
                 Div(
@@ -173,6 +174,60 @@ def DocumentProcessingErrorModal(message: str):
                     "OK",
                     cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors",
                     onclick="document.getElementById('document-processing-modal').remove(); window.location.href = '/my-documents';"
+                ),
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md max-w-md w-full text-center"
+            ),
+            cls="fixed inset-0 flex items-center justify-center z-50 p-4"
+        ),
+        cls="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40"
+    )
+
+def DocumentDeletingModal():
+    return Div(
+        Div(
+            Div(
+                H2(
+                    "Deleting document",
+                    cls="text-xl font-semibold mb-2 text-gray-900 dark:text-white"
+                ),
+                P(
+                    "Deleting the document from the database",
+                    cls="text-gray-500 dark:text-gray-400"
+                ),
+                Div(
+                    Lucide(icon="loader-circle", cls="size-10 animate-spin"),
+                    cls="mt-6 flex justify-center"
+                ),
+                cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md max-w-md w-full text-center"
+            ),
+            cls="fixed inset-0 flex items-center justify-center z-50 p-4"
+        ),
+        cls="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-40"
+    )
+
+def DocumentDeletingErrorModal(message: str):
+    return Div(
+        Div(
+            Div(
+                Div(
+                    Lucide(icon="circle-x", cls="size-12 text-red-500"),
+                    cls="flex justify-center mb-4"
+                ),
+                H2(
+                    "Document deleting failed",
+                    cls="text-xl font-semibold mb-2 text-gray-900 dark:text-white"
+                ),
+                P(
+                    "The document deleting failed, check the console logs for more details",
+                    cls="text-gray-500 dark:text-gray-400 mb-6"
+                ) if message is None else P(
+                    message,
+                    cls="text-gray-500 dark:text-gray-400 mb-6"
+                ),
+                Button(
+                    "OK",
+                    cls="w-full p-4 bg-black text-white rounded-[10px] hover:bg-gray-800 transition-colors",
+                    onclick="document.getElementById('document-deleting-modal').remove(); window.location.href = '/my-documents';"
                 ),
                 cls="bg-white dark:bg-gray-900 p-8 rounded-[10px] shadow-md max-w-md w-full text-center"
             ),

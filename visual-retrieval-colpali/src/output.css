@@ -780,6 +780,10 @@ body {
   margin-top: -3rem;
 }
 
+.-mt-16 {
+  margin-top: -4rem;
+}
+
 .mb-1 {
   margin-bottom: 0.25rem;
 }
@@ -955,8 +959,16 @@ body {
   width: 12rem;
 }
 
+.w-\[400px\] {
+  width: 400px;
+}
+
 .w-full {
   width: 100%;
+}
+
+.min-w-\[400px\] {
+  min-width: 400px;
 }
 
 .min-w-\[300px\] {
@@ -965,10 +977,6 @@ body {
 
 .max-w-4xl {
   max-width: 56rem;
-}
-
-.max-w-\[300px\] {
-  max-width: 300px;
 }
 
 .max-w-\[50\%\] {
@@ -985,6 +993,14 @@ body {
 
 .max-w-screen-xl {
   max-width: 1280px;
+}
+
+.max-w-\[400px\] {
+  max-width: 400px;
+}
+
+.max-w-\[300px\] {
+  max-width: 300px;
 }
 
 .flex-1 {
@@ -1190,6 +1206,10 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.whitespace-pre-line {
+  white-space: pre-line;
 }
 
 .break-words {

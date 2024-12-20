@@ -52,7 +52,13 @@ from frontend.layout import Layout
 from frontend.components.login import Login
 from backend.middleware import login_required
 from backend.init_db import init_default_users, clear_image_queries
-from frontend.components.my_documents import MyDocuments, DocumentProcessingModal, DocumentProcessingErrorModal
+from frontend.components.my_documents import (
+    MyDocuments,
+    DocumentProcessingModal,
+    DocumentProcessingErrorModal,
+    DocumentDeletingModal,
+    DocumentDeletingErrorModal
+)
 from frontend.components.settings import Settings, TabContent
 from backend.deploy import deploy_application_step_1, deploy_application_step_2
 from backend.feed import feed_documents_to_vespa, remove_document_from_vespa
@@ -726,25 +732,27 @@ async def delete_document(request, document_id: str):
     user_id = request.session["user_id"]
 
     try:
-        # Get settings for Vespa removal
         settings = await request.app.db.get_user_settings(user_id)
         if not settings:
             logger.error("Settings not found")
             return {"status": "error", "message": "Settings not found"}
 
-        # First remove from Vespa
-        remove_document_from_vespa(settings, document_id)
+        vespa_result = remove_document_from_vespa(settings, document_id)
+        if vespa_result["status"] == "error":
+            logger.error(f"Error removing document from Vespa: {vespa_result['message']}")
+            return vespa_result
 
-        # Then delete from database and filesystem
         await app.db.delete_document(document_id)
-
-        # Return updated table
         documents = await app.db.get_user_documents(user_id)
-        return MyDocuments(documents=documents).documents_table()
+
+        return {
+            "status": "success",
+            "content": str(MyDocuments(documents=documents).documents_table())
+        }
 
     except Exception as e:
         logger.error(f"Error deleting document: {str(e)}")
-        raise
+        return {"status": "error", "message": str(e)}
 
 @rt("/settings")
 @login_required
@@ -842,7 +850,6 @@ async def update_connection_settings(request):
     api_key_file = form.get("api_key_file")
     if api_key_file and hasattr(api_key_file, "filename"):
         from pathlib import Path
-        import shutil
 
         # Create user's key directory if it doesn't exist
         user_key_dir = Path("storage/user_keys") / str(user_id)
@@ -988,6 +995,17 @@ async def get_document_processing_modal(request):
 async def get_document_processing_error_modal(request):
     message = request.query_params.get("message", None)
     return DocumentProcessingErrorModal(message=message)
+
+@rt("/document-deleting-modal")
+@login_required
+async def get_document_deleting_modal(request):
+    return DocumentDeletingModal()
+
+@rt("/document-deleting-modal/error")
+@login_required
+async def get_document_deleting_error_modal(request):
+    message = request.query_params.get("message", None)
+    return DocumentDeletingErrorModal(message=message)
 
 @rt("/detail")
 @login_required

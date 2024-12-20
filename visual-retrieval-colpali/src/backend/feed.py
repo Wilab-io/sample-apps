@@ -3,6 +3,7 @@ import json
 import hashlib
 import subprocess
 import logging
+import time
 import numpy as np
 from tqdm import tqdm
 from backend.models import UserSettings
@@ -78,6 +79,7 @@ def feed_documents_to_vespa(settings: UserSettings, user_id: str, model: ColPali
                     pdf_pages.append(
                         {
                             "title": title,
+                            "id": doc_id,
                             "path": pdf_file,
                             "url": static_path,
                             "image": image,
@@ -102,6 +104,7 @@ def feed_documents_to_vespa(settings: UserSettings, user_id: str, model: ColPali
                     pdf_pages.append(
                         {
                             "title": title,
+                            "id": doc_id,
                             "path": img_file,
                             "url": static_path,
                             "image": image,
@@ -139,6 +142,7 @@ def feed_documents_to_vespa(settings: UserSettings, user_id: str, model: ColPali
         try:
             for pdf, embedding in zip(pdf_pages, embeddings):
                 title = pdf["title"]
+                doc_id = pdf["id"]
                 image = pdf["image"]
                 url = pdf["url"]
                 text = pdf.get("text", "")
@@ -152,11 +156,10 @@ def feed_documents_to_vespa(settings: UserSettings, user_id: str, model: ColPali
                 base_64_full_image = get_base64_image(image, add_url_prefix=False)
                 embedding_dict = {k: v for k, v in enumerate(embedding)}
                 binary_embedding = float_to_binary_embedding(embedding_dict)
-                id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
                 page = {
-                    "id": id_hash,
+                    "id": doc_id,
                     "fields": {
-                        "id": id_hash,
+                        "id": doc_id,
                         "title": title,
                         "url": url,
                         "page_number": page_no,
@@ -339,7 +342,6 @@ def generate_embeddings(images, model, processor, batch_size=1) -> np.ndarray:
     return all_embeddings
 
 def remove_document_from_vespa(settings: UserSettings, document_id: str):
-    """Remove a document from Vespa by ID"""
     logger = logging.getLogger("vespa_app")
     logger.info(f"Removing document {document_id} from Vespa")
 
@@ -348,36 +350,45 @@ def remove_document_from_vespa(settings: UserSettings, document_id: str):
     VESPA_INSTANCE_NAME = settings.instance_name
     VESPA_SCHEMA_NAME = "pdf_page"
 
-    # Get application directory path
     base_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(os.path.dirname(base_dir))
     app_dir = os.path.join(parent_dir, "application")
 
-    # Store current directory
     current_dir = os.getcwd()
 
     try:
         logger.debug("Removing document from Vespa")
-
-        # Change to application directory
         os.chdir(app_dir)
 
-        # Construct the full document ID
         vespa_doc_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
 
-        # Run the remove command
-        subprocess.run(
+        process = subprocess.Popen(
             ["vespa", "document", "remove", vespa_doc_id, "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"],
-            check=True
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
         )
 
-        logger.info(f"Successfully removed document {document_id} from Vespa")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to remove document from Vespa: {str(e)}")
-        raise
+        stdout, stderr = process.communicate()
+
+        if process.returncode != 0:
+            if "no endpoints found" in stderr.lower():
+                logger.error("No Vespa endpoints found")
+                return {"status": "error", "message": "No Vespa endpoints found. Please make sure the application is deployed and accessible."}
+            logger.error(f"Command failed with return code {process.returncode}: {stderr}")
+            return {"status": "error", "message": f"Command failed: {stderr}"}
+
+        success_message = f"Success: remove {vespa_doc_id}"
+        if success_message.lower() in stdout.lower():
+            logger.info(f"Successfully removed document {document_id} from Vespa")
+            return {"status": "success"}
+        else:
+            logger.error(f"Document removal may have failed. Output: {stdout}")
+            return {"status": "error", "message": "Document removal could not be confirmed"}
+
     except Exception as e:
         logger.error(f"Error removing document from Vespa: {str(e)}")
-        raise
+        return {"status": "error", "message": f"Error removing document from Vespa: {str(e)}"}
+
     finally:
-        # Always restore the original working directory
         os.chdir(current_dir)
