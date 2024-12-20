@@ -46,7 +46,7 @@ async def init_default_users(logger: logging.Logger, db: Database):
                         username="admin",
                         password_hash=hash_password("1")
                     )
-                    await db.add_user(admin_user)
+                    await db.create_users([admin_user])
                     logger.info("Admin user created successfully")
                 else:
                     logger.info("Admin user already exists")
