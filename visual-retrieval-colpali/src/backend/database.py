@@ -142,6 +142,26 @@ class Database:
                         await self.delete_document(document.document_id)
             raise
 
+    async def delete_all_user_documents(self, user_id: str):
+        """Delete all documents for a given user"""
+        self.logger.debug(f"Deleting all documents for user {user_id}")
+
+        try:
+            async with self.get_session() as session:
+                result = await session.execute(
+                    select(UserDocument).where(UserDocument.user_id == UUID(user_id))
+                )
+                documents = result.scalars().all()
+
+                for document in documents:
+                    await self.delete_document(str(document.document_id))
+
+                self.logger.info(f"Successfully deleted all documents for user {user_id}")
+
+        except Exception as e:
+            self.logger.error(f"Error deleting documents for user {user_id}: {str(e)}")
+            raise
+
     async def delete_document(self, document_id: str):
         """Delete a document from both database and filesystem"""
         self.logger.debug(f"Deleting document {document_id}")
@@ -250,8 +270,14 @@ class Database:
                 try:
                     await session.execute(delete(UserSettings).where(UserSettings.user_id == user_id_uuid))
                     self.logger.debug(f"Deleted settings for user ID: {user_id}")
-                    await session.execute(delete(UserDocument).where(UserDocument.user_id == user_id_uuid))
-                    self.logger.debug(f"Deleted documents for user ID: {user_id}")
+                    await self.delete_all_user_documents(user_id)
+
+                    user_keys_dir = Path(f"storage/user_keys/{user_id}")
+                    if user_keys_dir.exists():
+                        for file in user_keys_dir.iterdir():
+                            file.unlink()
+                        user_keys_dir.rmdir()
+                        self.logger.debug(f"Deleted user keys directory for user ID: {user_id}")
 
                     await session.execute(delete(User).where(User.user_id == user_id_uuid))
                     self.logger.info(f"Deleted user with ID: {user_id}")
@@ -271,7 +297,6 @@ class Database:
                     continue
 
                 if username in existing_usernames:
-                    self.logger.info(f"Username {username} already exists, skipping.")
                     continue
 
                 try:
