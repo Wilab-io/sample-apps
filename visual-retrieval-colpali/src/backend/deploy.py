@@ -1,11 +1,7 @@
 import os
-import json
-import hashlib
-import torch
-import numpy as np
 from dotenv import load_dotenv
 import logging
-from pydantic import BaseModel
+
 from vespa.package import (
     ApplicationPackage,
     AuthClient,
@@ -26,30 +22,12 @@ from vespa.configuration.services import (
     documents,
     node,
     certificate,
-    token,
     document,
     nodes,
 )
 from vespa.configuration.vt import vt
 from vespa.package import ServicesConfiguration
 from backend.models import UserSettings
-
-# Google Generative AI
-import google.generativeai as genai
-
-# Torch and other ML libraries
-import torch
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-from pdf2image import convert_from_path
-from pypdf import PdfReader
-
-# ColPali model and processor
-from colpali_engine.models import ColPali, ColPaliProcessor
-from vidore_benchmark.utils.image_utils import scale_image, get_base64_image
-
-from PIL import Image
-import pytesseract
 
 import pty
 import subprocess
@@ -67,8 +45,6 @@ async def deploy_application_step_1(settings: UserSettings):
         settings.tenant_name,
         settings.app_name,
         settings.instance_name,
-        settings.vespa_token_id,
-        settings.vespa_token_value,
         settings.gemini_token
     ]):
         raise ValueError("Missing required settings")
@@ -82,8 +58,6 @@ async def deploy_application_step_1(settings: UserSettings):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(os.path.dirname(base_dir))
     app_dir = os.path.join(parent_dir, "application")
-
-    copy_api_key_file(app_dir, VESPA_TENANT_NAME)
 
     current_dir = os.getcwd()
 
@@ -196,7 +170,7 @@ async def deploy_application_step_1(settings: UserSettings):
     finally:
         os.chdir(current_dir)
 
-async def deploy_application_step_2(request, settings: UserSettings, user_id: str, model: ColPali, processor: ColPaliProcessor, docNames: dict[str, str]):
+async def deploy_application_step_2(request, settings: UserSettings, user_id: str):
     """Deploy the Vespa application"""
     # Load environment variables
     load_dotenv()
@@ -205,14 +179,12 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
     VESPA_TENANT_NAME = settings.tenant_name
     VESPA_APPLICATION_NAME = settings.app_name
     VESPA_INSTANCE_NAME = settings.instance_name
-    VESPA_SCHEMA_NAME = "pdf_page"
-    VESPA_TOKEN_ID_WRITE = settings.vespa_token_id
-    GEMINI_API_KEY = settings.gemini_token
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(os.path.dirname(base_dir))
-    storage_dir = os.path.join(parent_dir, "src/storage/user_documents", user_id)
     app_dir = os.path.join(parent_dir, "application")
+
+    copy_api_key_file(parent_dir, VESPA_TENANT_NAME, user_id)
 
     try:
         logger.debug("Generating services.xml")
@@ -228,11 +200,6 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
                         client(
                             certificate(file="security/clients.pem"),
                             id="mtls",
-                            permissions="read,write",
-                        ),
-                        client(
-                            token(id=f"{VESPA_TOKEN_ID_WRITE}"),
-                            id="token_write",
                             permissions="read,write",
                         ),
                     ),
@@ -344,288 +311,35 @@ async def deploy_application_step_2(request, settings: UserSettings, user_id: st
             # Always restore the original working directory
             os.chdir(current_dir)
 
-        # Configure Google Generative AI
-        genai.configure(api_key=GEMINI_API_KEY)
-
-        logger.info(f"Looking for documents in: {storage_dir}")
-
-        if not os.path.exists(storage_dir):
-            raise FileNotFoundError(f"Directory not found: {storage_dir}")
-
-        pdfPaths = [
-            os.path.join(storage_dir, f)
-            for f in os.listdir(storage_dir)
-            if f.endswith(".pdf")
-        ]
-
-        imgPaths = [
-            os.path.join(storage_dir, f)
-            for f in os.listdir(storage_dir)
-            if f.endswith(".png") or f.endswith(".jpg") or f.endswith(".jpeg")
-        ]
-
-        if not pdfPaths and not imgPaths:
-            raise FileNotFoundError(f"No PDF or image files found in {storage_dir}")
-
-        logger.info(f"Found {len(pdfPaths)} PDF files and {len(imgPaths)} image files to process")
-
-        pdf_pages = []
-
-        # Process PDFs
-        for pdf_file in pdfPaths:
-            logger.debug(f"Processing PDF: {os.path.basename(pdf_file)}")
-            images, texts = get_pdf_images(pdf_file)
-            logger.debug(f"Extracted {len(images)} pages from {os.path.basename(pdf_file)}")
-            for page_no, (image, text) in enumerate(zip(images, texts)):
-                doc_id = os.path.splitext(os.path.basename(pdf_file))[0]
-                title = docNames.get(doc_id, "")
-                static_path = f"/storage/user_documents/{user_id}/{os.path.basename(pdf_file)}"
-                pdf_pages.append(
-                    {
-                        "title": title,
-                        "path": pdf_file,
-                        "url": static_path,
-                        "image": image,
-                        "text": text,
-                        "page_no": page_no,
-                    }
-                )
-
-        # Process Images
-        for img_file in imgPaths:
-            logger.debug(f"Processing image: {os.path.basename(img_file)}")
-            images, texts = get_image_with_text(img_file)
-            logger.debug(f"Extracted text from {os.path.basename(img_file)}")
-            for page_no, (image, text) in enumerate(zip(images, texts)):
-                doc_id = os.path.splitext(os.path.basename(img_file))[0]
-                title = docNames.get(doc_id, "")
-                static_path = f"/storage/user_documents/{user_id}/{os.path.basename(img_file)}"
-                pdf_pages.append(
-                    {
-                        "title": title,
-                        "path": img_file,
-                        "url": static_path,
-                        "image": image,
-                        "text": text,
-                        "page_no": page_no,
-                    }
-                )
-
-        logger.info(f"Total processed: {len(pdf_pages)} pages")
-
-        prompt_text, pydantic_model = settings.prompt, GeneratedQueries
-
-        logger.debug(f"Generating queries")
-
-        for pdf in tqdm(pdf_pages):
-            image = pdf.get("image")
-            pdf["queries"] = generate_queries(image, prompt_text, pydantic_model)
-
-        images = [pdf["image"] for pdf in pdf_pages]
-        embeddings = generate_embeddings(images, model, processor)
-
-        logger.info(f"Generated {len(embeddings)} embeddings")
-
-        vespa_feed = []
-        for pdf, embedding in zip(pdf_pages, embeddings):
-            title = pdf["title"]
-            image = pdf["image"]
-            url = pdf["url"]
-            text = pdf.get("text", "")
-            page_no = pdf["page_no"]
-            query_dict = pdf["queries"]
-            questions = [v for k, v in query_dict.items() if "question" in k and v]
-            queries = [v for k, v in query_dict.items() if "query" in k and v]
-            base_64_image = get_base64_image(
-                scale_image(image, 32), add_url_prefix=False
-            )  # Scaled down image to return fast on search (~1kb)
-            base_64_full_image = get_base64_image(image, add_url_prefix=False)
-            embedding_dict = {k: v for k, v in enumerate(embedding)}
-            binary_embedding = float_to_binary_embedding(embedding_dict)
-            # id_hash should be md5 hash of url and page_number
-            id_hash = hashlib.md5(f"{title}_{page_no}".encode()).hexdigest()
-            page = {
-                "id": id_hash,
-                "fields": {
-                    "id": id_hash,
-                    "title": title,
-                    "url": url,
-                    "page_number": page_no,
-                    "blur_image": base_64_image,
-                    "full_image": base_64_full_image,
-                    "text": text,
-                    "embedding": binary_embedding,
-                    "queries": queries,
-                    "questions": questions,
-                },
-            }
-            vespa_feed.append(page)
-
-        with open(app_dir + "/vespa_feed.json", "w") as f:
-            vespa_feed_to_save = []
-            for page in vespa_feed:
-                document_id = page["id"]
-                put_id = f"id:{VESPA_APPLICATION_NAME}:{VESPA_SCHEMA_NAME}::{document_id}"
-                vespa_feed_to_save.append({"put": put_id, "fields": page["fields"]})
-            json.dump(vespa_feed_to_save, f)
-
-        logger.debug(f"Saved vespa feed to {app_dir}/vespa_feed.json")
-
-        current_dir = os.getcwd()
-
-        try:
-            logger.debug("Feeding vespa application")
-
-            # Change to application directory
-            os.chdir(app_dir)
-
-            subprocess.run(["vespa", "feed", "vespa_feed.json", "-a", f"{VESPA_TENANT_NAME}.{VESPA_APPLICATION_NAME}.{VESPA_INSTANCE_NAME}"], check=True)
-
-            logger.info(f"Feeding completed successfully!")
-        finally:
-            # Always restore the original working directory
-            os.chdir(current_dir)
-
         return {"status": "success"}
 
     except Exception as e:
         logger.error(f"Deployment failed: {str(e)}")
         raise
 
-def get_pdf_images(pdf_path):
-    reader = PdfReader(pdf_path)
-    page_texts = []
-    for page_number in range(len(reader.pages)):
-        page = reader.pages[page_number]
-        text = page.extract_text()
-        page_texts.append(text)
-    images = convert_from_path(pdf_path)
-    # Convert to PIL images
-    assert len(images) == len(page_texts)
-    return images, page_texts
+def copy_api_key_file(parent_dir, tenant_name, user_id: str):
+    from pathlib import Path
+    import shutil
 
-def get_image_with_text(image_path):
-    """Process a single image file and extract its text using OCR"""
-    try:
-        # Open and process image
-        image = Image.open(image_path)
+    user_key_dir = Path("storage/user_keys") / str(user_id)
 
-        # Extract text using OCR
-        text = pytesseract.image_to_string(image)
+    # Find the user's .pem file
+    pem_files = list(user_key_dir.glob("*.pem"))
+    if not pem_files:
+        raise FileNotFoundError(f"No .pem file found in user directory {user_key_dir}")
 
-        # Return tuple of image and text (similar to get_pdf_images format)
-        return [image], [text]
-    except Exception as e:
-        logger.error(f"Error processing image {image_path}: {str(e)}")
-        raise
+    api_key_src = pem_files[0]  # Use the first .pem file found
 
-class GeneratedQueries(BaseModel):
-    broad_topical_question: str
-    broad_topical_query: str
-    specific_detail_question: str
-    specific_detail_query: str
-    visual_element_question: str
-    visual_element_query: str
-
-def generate_queries(image, prompt_text, pydantic_model):
-    gemini_model = genai.GenerativeModel("gemini-1.5-flash-8b")
-
-    try:
-        response = gemini_model.generate_content(
-            [image, "\n\n", prompt_text],
-            generation_config=genai.GenerationConfig(
-                response_mime_type="application/json",
-                response_schema=pydantic_model,
-            ),
-        )
-        queries = json.loads(response.text)
-    except Exception as _e:
-        queries = {
-            "broad_topical_question": "",
-            "broad_topical_query": "",
-            "specific_detail_question": "",
-            "specific_detail_query": "",
-            "visual_element_question": "",
-            "visual_element_query": "",
-        }
-    return queries
-
-def generate_embeddings(images, model, processor, batch_size=1) -> np.ndarray:
-    """
-    Generate embeddings for a list of images.
-    Move to CPU only once per batch.
-
-    Args:
-        images (List[PIL.Image]): List of PIL images.
-        model (nn.Module): The model to generate embeddings.
-        processor: The processor to preprocess images.
-        batch_size (int, optional): Batch size for processing. Defaults to 64.
-
-    Returns:
-        np.ndarray: Embeddings for the images, shape
-                    (len(images), processor.max_patch_length (1030 for ColPali), model.config.hidden_size (Patch embedding dimension - 128 for ColPali)).
-    """
-
-    def collate_fn(batch):
-        # Batch is a list of images
-        return processor.process_images(batch)  # Should return a dict of tensors
-
-    dataloader = DataLoader(
-        images,
-        shuffle=False,
-        collate_fn=collate_fn,
-    )
-
-    embeddings_list = []
-    for batch in tqdm(dataloader):
-        with torch.no_grad():
-            batch = {k: v.to(model.device) for k, v in batch.items()}
-            embeddings_batch = model(**batch)
-            # Convert tensor to numpy array and append to list
-            embeddings_list.extend(
-                [t.cpu().numpy() for t in torch.unbind(embeddings_batch)]
-            )
-
-    # Stack all embeddings into a single numpy array
-    all_embeddings = np.stack(embeddings_list, axis=0)
-    return all_embeddings
-
-def float_to_binary_embedding(float_query_embedding: dict) -> dict:
-    """Utility function to convert float query embeddings to binary query embeddings."""
-    binary_query_embeddings = {}
-    for k, v in float_query_embedding.items():
-        binary_vector = (
-            np.packbits(np.where(np.array(v) > 0, 1, 0)).astype(np.int8).tolist()
-        )
-        binary_query_embeddings[k] = binary_vector
-    return binary_query_embeddings
-
-# A function to create an inherited rank profile which also returns quantized similarity scores
-def with_quantized_similarity(rank_profile: RankProfile) -> RankProfile:
-    return RankProfile(
-        name=f"{rank_profile.name}_sim",
-        first_phase=rank_profile.first_phase,
-        inherits=rank_profile.name,
-        summary_features=["quantized"],
-    )
-
-def copy_api_key_file(app_dir, tenant_name):
-    # Find any .pem file in the source directory
-    api_key_src = next((f for f in os.listdir(app_dir) if f.endswith('.pem')), None)
-    if api_key_src:
-        api_key_src = os.path.join(app_dir, api_key_src)
-    else:
-        raise FileNotFoundError("No .pem file found in application directory")
-
-    api_key_dest = os.path.expanduser("~/.vespa")
-    os.makedirs(api_key_dest, exist_ok=True)
+    # Create the vespa config directory if it doesn't exist
+    api_key_dest = Path.home() / ".vespa"
+    api_key_dest.mkdir(parents=True, exist_ok=True)
 
     dest_filename = f"{tenant_name}.api-key.pem"
-    dest_path = os.path.join(api_key_dest, dest_filename)
+    dest_path = api_key_dest / dest_filename
 
-    if os.path.exists(api_key_src):
-        import shutil
+    try:
         shutil.copy2(api_key_src, dest_path)
         logger.info(f"Copied API key from {api_key_src} to {dest_path}")
-    else:
-        logger.warning(f"API key file not found at {api_key_src}")
+    except Exception as e:
+        logger.error(f"Failed to copy API key: {str(e)}")
+        raise

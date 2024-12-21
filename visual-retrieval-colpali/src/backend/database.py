@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker as sessionMaker
 from sqlalchemy.schema import CreateTable
-from sqlalchemy import select, delete, and_, true
+from sqlalchemy import select, delete
 from uuid import UUID
 import os
 from typing import Optional, AsyncGenerator
@@ -12,7 +12,6 @@ import logging
 from pathlib import Path
 import torch
 from .auth import hash_password
-import bcrypt
 
 DATABASE_URL = (
     f"postgresql+asyncpg://"
@@ -32,6 +31,7 @@ STORAGE_DIR = Path("storage/user_documents")
 class Database:
     def __init__(self):
         self.session_maker = async_session
+        self.logger = logging.getLogger("vespa_app")
 
     @asynccontextmanager
     async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
@@ -73,14 +73,13 @@ class Database:
 
     async def get_user_documents(self, user_id: UUID):
         """Get all documents for a user"""
-        logger = logging.getLogger("vespa_app")
-        logger.debug(f"Database: Fetching documents for user_id: {user_id}")
+        self.logger.debug(f"Database: Fetching documents for user_id: {user_id}")
         async with self.get_session() as session:
             result = await session.execute(
                 select(UserDocument).where(UserDocument.user_id == user_id)
             )
             documents = result.scalars().all()
-            logger.debug(f"Database: Found {len(documents)} documents")
+            self.logger.debug(f"Database: Found {len(documents)} documents")
             return documents
 
     async def get_user_document_by_id(self, document_id: str):
@@ -93,8 +92,7 @@ class Database:
 
     async def add_user_document(self, user_id: str, document_name: str, file_content: bytes):
         """Add a new document to both filesystem and database"""
-        logger = logging.getLogger("vespa_app")
-        logger.debug(f"Adding document {document_name} for user {user_id}")
+        self.logger.debug(f"Adding document {document_name} for user {user_id}")
 
         try:
             file_ext = Path(document_name).suffix.lower()
@@ -129,11 +127,11 @@ class Database:
                 save_path = user_dir / f"{new_document.document_id}{file_ext}"
                 save_path.write_bytes(file_content)
 
-                logger.debug(f"Successfully added document {document_name} with ID {new_document.document_id}")
-                return new_document
+                self.logger.debug(f"Successfully added document {document_name} with ID {new_document.document_id}")
+                return str(new_document.document_id)
 
         except Exception as e:
-            logger.error(f"Error adding document {document_name}: {str(e)}")
+            self.logger.error(f"Error adding document {document_name}: {str(e)}")
             if 'new_document' in locals():
                 async with self.get_session() as session:
                     result = await session.execute(
@@ -144,10 +142,29 @@ class Database:
                         await self.delete_document(document.document_id)
             raise
 
+    async def delete_all_user_documents(self, user_id: str):
+        """Delete all documents for a given user"""
+        self.logger.debug(f"Deleting all documents for user {user_id}")
+
+        try:
+            async with self.get_session() as session:
+                result = await session.execute(
+                    select(UserDocument).where(UserDocument.user_id == UUID(user_id))
+                )
+                documents = result.scalars().all()
+
+                for document in documents:
+                    await self.delete_document(str(document.document_id))
+
+                self.logger.info(f"Successfully deleted all documents for user {user_id}")
+
+        except Exception as e:
+            self.logger.error(f"Error deleting documents for user {user_id}: {str(e)}")
+            raise
+
     async def delete_document(self, document_id: str):
         """Delete a document from both database and filesystem"""
-        logger = logging.getLogger("vespa_app")
-        logger.debug(f"Deleting document {document_id}")
+        self.logger.debug(f"Deleting document {document_id}")
 
         try:
             async with self.get_session() as session:
@@ -157,22 +174,22 @@ class Database:
                 document = result.scalar_one_or_none()
 
                 if not document:
-                    logger.warning(f"Document {document_id} not found in database")
+                    self.logger.warning(f"Document {document_id} not found in database")
                     return
 
                 file_path = STORAGE_DIR / str(document.user_id) / f"{document_id}{document.file_extension}"
                 if file_path.exists():
                     file_path.unlink()
-                    logger.info(f"Deleted file {file_path}")
+                    self.logger.info(f"Deleted file {file_path}")
 
                 await session.execute(
                     delete(UserDocument).where(UserDocument.document_id == document_id)
                 )
                 await session.commit()
-                logger.info(f"Deleted database entry for document {document_id}")
+                self.logger.info(f"Deleted database entry for document {document_id}")
 
         except Exception as e:
-            logger.error(f"Error deleting document {document_id}: {str(e)}")
+            self.logger.error(f"Error deleting document {document_id}: {str(e)}")
             raise
 
     async def get_demo_questions(self, user_id: str) -> list[str]:
@@ -237,60 +254,60 @@ class Database:
         """Get all users from the app_user table"""
         async with self.get_session() as session:
             result = await session.execute(
-                select(User) 
+                select(User)
             )
             users = result.scalars().all()
             return [
                 {"user_id": str(user.user_id), "username": user.username, "password": user.password_hash}
                 for user in users
             ]
-       
+
     async def delete_users(self, user_ids: set) -> None:
         """Delete users and their associated data."""
-        logger = logging.getLogger("vespa_app")
         async with self.get_session() as session:
             for user_id in user_ids:
                 user_id_uuid = UUID(user_id)
                 try:
                     await session.execute(delete(UserSettings).where(UserSettings.user_id == user_id_uuid))
-                    logger.info(f"Deleted settings for user ID: {user_id}")
-                    await session.execute(delete(UserDocument).where(UserDocument.user_id == user_id_uuid))
-                    logger.info(f"Deleted documents for user ID: {user_id}")
+                    self.logger.debug(f"Deleted settings for user ID: {user_id}")
+                    await self.delete_all_user_documents(user_id)
+
+                    user_keys_dir = Path(f"storage/user_keys/{user_id}")
+                    if user_keys_dir.exists():
+                        for file in user_keys_dir.iterdir():
+                            file.unlink()
+                        user_keys_dir.rmdir()
+                        self.logger.debug(f"Deleted user keys directory for user ID: {user_id}")
 
                     await session.execute(delete(User).where(User.user_id == user_id_uuid))
-                    logger.info(f"Deleted user with ID: {user_id}")
+                    self.logger.info(f"Deleted user with ID: {user_id}")
                 except Exception as e:
-                    logger.error(f"Error deleting user {user_id}: {e}")
+                    self.logger.error(f"Error deleting user {user_id}: {e}")
 
 
     async def create_users(self, users: dict, existing_usernames: set) -> None:
         """Create new users based on input data."""
-        logger = logging.getLogger("vespa_app")
-
         async with self.get_session() as session:
             for user_data in users.values():
                 username = user_data.get("username")
                 password = user_data.get("password")
 
                 if not username or not password:
-                    logger.warning(f"Invalid data for user {username}, skipping.")
+                    self.logger.warning(f"Invalid data for user {username}, skipping.")
                     continue
 
                 if username in existing_usernames:
-                    logger.info(f"Username {username} already exists, skipping.")
                     continue
 
                 try:
                     new_user = User(username=username, password_hash=hash_password(password))
                     session.add(new_user)
-                    logger.info(f"Created user: {username}")
+                    self.logger.info(f"Created user: {username}")
                 except Exception as e:
-                    logger.error(f"Error creating user {username}: {e}")
+                    self.logger.error(f"Error creating user {username}: {e}")
 
     async def update_users(self, users_data: dict) -> None:
         """Update users by deleting and creating as necessary."""
-        logger = logging.getLogger("vespa_app")
-
         users = {
             key.split("_")[1]: {
                 "username": users_data.get(f"username_{key.split('_')[1]}"),
@@ -316,22 +333,20 @@ class Database:
 
             try:
                 await session.commit()
-                logger.info("Users updated successfully")
+                self.logger.info("Users updated successfully")
             except Exception as e:
-                logger.error(f"Error committing user updates: {e}")
+                self.logger.error(f"Error committing user updates: {e}")
                 raise
 
     async def is_application_configured(self, user_id: str) -> bool:
-        documents = await self.get_user_documents(UUID(user_id))
-        has_documents = len(documents) > 0
+        from pathlib import Path
 
+        # Check for settings
         settings = await self.get_user_settings(user_id)
         if not settings:
             return False
 
         required_settings = [
-            settings.vespa_token_id,
-            settings.vespa_token_value,
             settings.gemini_token,
             settings.tenant_name,
             settings.app_name,
@@ -341,7 +356,14 @@ class Database:
 
         has_required_settings = all(setting is not None for setting in required_settings)
 
-        return has_documents and has_required_settings
+        # Check for API key file
+        user_key_dir = Path("storage/user_keys") / str(user_id)
+        uploaded_api_key = False
+        if user_key_dir.exists():
+            pem_files = list(user_key_dir.glob("*.pem"))
+            uploaded_api_key = len(pem_files) > 0
+
+        return has_required_settings and uploaded_api_key
 
     @staticmethod
     def get_default_prompt() -> str:
@@ -822,9 +844,6 @@ Only return JSON. Don't return any extra explanation text."""
 }"""
 
     async def store_image_query(self, query_id: str, embeddings: torch.Tensor, text: str, is_visual_only: bool) -> str:
-        logger = logging.getLogger("vespa_app")
-        logger.debug(f"Storing image query with ID {query_id}")
-
         try:
             # Convert embeddings tensor to numpy array and then to list
             embeddings_list = embeddings.detach().cpu().numpy().tolist()
@@ -839,11 +858,11 @@ Only return JSON. Don't return any extra explanation text."""
                 )
                 session.add(image_query)
                 await session.commit()
-                logger.debug(f"Successfully stored image query with ID {query_id}")
+                self.logger.debug(f"Successfully stored image query with ID {query_id}")
                 return query_id
 
         except Exception as e:
-            logger.error(f"Error storing image query: {str(e)}")
+            self.logger.error(f"Error storing image query: {str(e)}")
             raise
 
     async def get_image_query(self, query_id: str) -> Optional[ImageQuery]:
