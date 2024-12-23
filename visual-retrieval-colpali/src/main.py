@@ -98,6 +98,7 @@ image_search_js = Script(src="/static/js/image-search.js")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 # Configure logger
 logger = logging.getLogger("vespa_app")
+logger.handlers.clear()
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(
     logging.Formatter(
@@ -671,6 +672,7 @@ async def logout(request):
     if "user_id" in request.session:
         del request.session["user_id"]
         del request.session["username"]
+    app.deployed = False
     return Redirect("/login")
 
 @rt("/upload-files", methods=["POST"])
