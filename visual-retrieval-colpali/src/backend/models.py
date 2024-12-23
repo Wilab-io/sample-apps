@@ -40,8 +40,6 @@ class UserSettings(Base):
         nullable=False,
         default=RankerType.colpali
     )
-    vespa_token_id = Column(String, nullable=True)
-    vespa_token_value = Column(String, nullable=True)
     gemini_token = Column(String, nullable=True)
     vespa_cloud_endpoint = Column(String, nullable=True)
     tenant_name = Column(String, nullable=True)

@@ -1,5 +1,6 @@
 from fasthtml.common import Div, H1, H2, Input, Main, Button, P, Form, Label, Span, Textarea
 from lucide_fasthtml import Lucide
+from pathlib import Path
 from backend.models import UserSettings, User
 from shad4fast import (
     Table,
@@ -61,8 +62,8 @@ def TabButtons(active_tab: str, username: str = None, appConfigured: bool = Fals
                     cls="size-5 cursor-pointer ml-6 dark:brightness-0 dark:invert"
                 ),
                 P(
-                    "All required settings must be set\nand at least one document must be\nuploaded before deploying the application.",
-                    cls="absolute invisible group-hover:visible bg-white dark:bg-gray-900 text-black dark:text-white p-3 rounded-[10px] text-sm -mt-16 ml-2 shadow-sm w-[400px] z-50 whitespace-pre-line"
+                    "All required settings must be set\nbefore deploying the application.",
+                    cls="absolute invisible group-hover:visible bg-white dark:bg-gray-900 text-black dark:text-white p-3 rounded-[10px] text-sm -mt-12 ml-2 shadow-sm min-w-[300px] max-w-[300px]"
                 ),
                 cls="relative inline-block group"
             ),
@@ -235,6 +236,16 @@ def RankerSettings(ranker: str = "colpali"):
     )
 
 def ConnectionSettings(settings: UserSettings = None):
+    has_api_key = False
+    current_filename = None
+    if settings:
+        user_key_dir = Path("storage/user_keys") / str(settings.user_id)
+        if user_key_dir.exists():
+            pem_files = list(user_key_dir.glob("*.pem"))
+            has_api_key = len(pem_files) > 0
+            if has_api_key:
+                current_filename = pem_files[0].name
+
     return Div(
         Div(
             H2("Connection settings", cls="text-xl font-semibold px-4 mb-4"),
@@ -242,40 +253,9 @@ def ConnectionSettings(settings: UserSettings = None):
         ),
         Form(
             Div(
-                # Content wrapper with max-width to limit input width
                 Div(
                     Div(
                         H2("Tokens", cls="text-lg font-semibold mb-4"),
-                        Div(
-                            Label(
-                                "Vespa.ai token ID ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-token-id",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_token_id if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_token_id",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
-                        Div(
-                            Label(
-                                "Vespa.ai token value ",
-                                Span("*", cls="text-red-500"),
-                                htmlFor="vespa-token-value",
-                                cls="text-sm font-medium"
-                            ),
-                            Input(
-                                value=settings.vespa_token_value if settings else '',
-                                cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
-                                name="vespa_token_value",
-                                required=True
-                            ),
-                            cls="space-y-2 mb-4"
-                        ),
                         Div(
                             Label(
                                 "Gemini API token ",
@@ -287,7 +267,39 @@ def ConnectionSettings(settings: UserSettings = None):
                                 value=settings.gemini_token if settings else '',
                                 cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
                                 name="gemini_token",
-                                required=True
+                                required=True,
+                                **{"data-original": settings.gemini_token if settings else ''}
+                            ),
+                            cls="space-y-2 mb-4"
+                        ),
+                        Div(
+                            Label(
+                                "API key file ",
+                                Span("*", cls="text-red-500"),
+                                htmlFor="api-key-file",
+                                cls="text-sm font-medium"
+                            ),
+                            P(
+                                "Generate a random key on Vespa Console and upload it here",
+                                cls="text-sm text-gray-500 mb-2"
+                            ),
+                            Div(
+                                Input(
+                                    type="file",
+                                    accept=".pem",
+                                    cls="flex-1 w-full rounded-[10px] border border-input bg-background px-3 py-2 text-sm ring-offset-background",
+                                    name="api_key_file",
+                                    required=not has_api_key,
+                                    hx_post="/api/settings/connection",
+                                    hx_encoding="multipart/form-data",
+                                    hx_trigger="change",
+                                    **{"data-has-file": "true"} if has_api_key else {}
+                                ),
+                                P(
+                                    f"Current file: {current_filename}" if current_filename else None,
+                                    cls="text-sm text-gray-500 mt-2"
+                                ) if current_filename else None,
+                                cls="space-y-2"
                             ),
                             cls="space-y-2 mb-4"
                         ),
@@ -542,7 +554,7 @@ def UsersSettings(users: list = None):
                             ) if (i > 0 and not user.get("username") == "admin") else None,
                             cls="flex items-center mb-2"
                         ),
-                    **{"data-user-id": user.get("user_id")} 
+                    **{"data-user-id": user.get("user_id")}
                     )
                     for i, user in enumerate(users)
                 ]

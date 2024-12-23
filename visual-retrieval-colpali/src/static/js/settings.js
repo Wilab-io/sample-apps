@@ -11,7 +11,8 @@ function initializeSettingsPage() {
     const questionsContainer = document.getElementById('questions-container');
     const addButton = document.getElementById('add-question');
     const rankerInputs = document.querySelectorAll('input[name="ranker"]');
-    const connectionInputs = document.querySelectorAll('input[name="vespa_token_id"], input[name="vespa_token_value"], input[name="gemini_token"]');
+    const connectionInputs = document.querySelectorAll('input[name="gemini_token"]');
+    const apiKeyFile = document.querySelector('input[name="api_key_file"]');
     const applicationPackageInputs = document.querySelectorAll('input[name="tenant_name"], input[name="app_name"], textarea[name="schema"]');
     const promptTextarea = document.querySelector('textarea[name="prompt"]');
 
@@ -38,6 +39,10 @@ function initializeSettingsPage() {
         input.setAttribute('data-original', input.value);
         input.addEventListener('input', updateConnectionSaveButtonState);
     });
+
+    if (apiKeyFile) {
+        apiKeyFile.addEventListener('change', updateConnectionSaveButtonState);
+    }
 
     if (connectionInputs.length > 0) {
         updateConnectionSaveButtonState();
@@ -188,7 +193,7 @@ function updateUserRowNames() {
         if (usernameCell) {
             usernameCell.setAttribute('name', `username_${index}`);
         }
-    
+
     // Update password cell
     const passwordCell = row.querySelector('td[name^="password_"]');
     if (passwordCell) {
@@ -204,8 +209,8 @@ function updateUserSaveButtonState(is_deletion = false) {
     const inputs = usersContainer.querySelectorAll('input');
     var hasChanges = false;
     var hasIncompleteNewUser = false;
+    var hasDuplicateUsername = false;
 
-    // Handle deletion case first
     if (is_deletion) {
         hasChanges = true;
     } else {
@@ -215,20 +220,34 @@ function updateUserSaveButtonState(is_deletion = false) {
         });
     }
 
-    // Check for incomplete new user entries
     const userRows = document.querySelectorAll('#users-container tbody tr');
+    const usernames = new Set();
+    const duplicateUsernames = new Set();
+
     userRows.forEach((row) => {
+        const usernameCell = row.querySelector('td[name^="username_"]');
+        const passwordCell = row.querySelector('td[name^="password_"]');
+        const usernameInput = usernameCell.querySelector('input');
+        const passwordInput = passwordCell.querySelector('input');
+
+        const username = usernameInput ? usernameInput.value.trim() : usernameCell.textContent.trim();
+
         if (row.getAttribute('data-user-id') === 'new') {
-            const usernameInput = row.querySelector('td[name^="username_"] input');
-            const passwordInput = row.querySelector('td[name^="password_"] input');
-            
-            if (!usernameInput?.value.trim() || !passwordInput?.value.trim()) {
+            if (!username || !passwordInput?.value.trim()) {
                 hasIncompleteNewUser = true;
             }
         }
+
+        if (username) {
+            if (usernames.has(username.toLowerCase())) {
+                duplicateUsernames.add(username.toLowerCase());
+                hasDuplicateUsername = true;
+            }
+            usernames.add(username.toLowerCase());
+        }
     });
-    
-    if (hasChanges && !hasIncompleteNewUser) {
+
+    if (hasChanges && !hasIncompleteNewUser && !hasDuplicateUsername) {
         unsavedChanges.classList.remove('hidden');
         enabledButton.classList.remove('hidden');
         disabledButton.classList.add('hidden');
@@ -239,20 +258,20 @@ function updateUserSaveButtonState(is_deletion = false) {
             unsavedChanges.classList.add('hidden');
         }
     }
-    
+
     const form = document.createElement('form');
     let userIndex = 0;
     userRows.forEach((row) => {
         const usernameCell = row.querySelector('td[name^="username_"]');
         const passwordCell = row.querySelector('td[name^="password_"]');
         const userIdCell = row.querySelector('td[name^="user_id_"]');
-        
+
         const usernameInput = usernameCell.querySelector('input');
         const passwordInput = passwordCell.querySelector('input');
         const username = usernameInput ? usernameInput.value.trim() : usernameCell.textContent.trim();
         const password = passwordInput ? passwordInput.value.trim() : usernameCell.textContent.trim();
         const userId = userIdCell ? userIdCell.textContent.trim() : '';
-        
+
         if (username && password) {
             const usernameFormInput = document.createElement('input');
             usernameFormInput.type = 'hidden';
@@ -260,7 +279,7 @@ function updateUserSaveButtonState(is_deletion = false) {
             usernameFormInput.value = username;
             form.appendChild(usernameFormInput);
 
-            const passwordFormInput = document.createElement('input'); 
+            const passwordFormInput = document.createElement('input');
             passwordFormInput.type = 'hidden';
             passwordFormInput.name = `password_${userIndex}`;
             passwordFormInput.value = password;
@@ -298,7 +317,7 @@ document.addEventListener('click', function (e) {
         usernameCell.setAttribute('name', `username_${tableBody.children.length}`);
         usernameCell.className = 'p-4';
 
-        const passwordCell = document.createElement('td'); 
+        const passwordCell = document.createElement('td');
         passwordCell.setAttribute('name', `password_${tableBody.children.length}`);
         passwordCell.className = 'p-4';
 
@@ -339,7 +358,7 @@ document.addEventListener('click', function (e) {
         });
 
         const deleteButton = document.createElement('button');
-        deleteButton.className = 'delete-user ml-2';
+        deleteButton.className = 'delete-user ml-2 mt-2';
         deleteButton.setAttribute('variant', 'ghost');
         deleteButton.setAttribute('size', 'icon');
         deleteButton.innerHTML = `
@@ -400,25 +419,23 @@ function updateRankerSaveButtonState() {
 }
 
 function updateConnectionSaveButtonState() {
-    const vespaTokenID = document.querySelector('input[name="vespa_token_id"]');
-    const vespaTokenValue = document.querySelector('input[name="vespa_token_value"]');
     const geminiToken = document.querySelector('input[name="gemini_token"]');
+    const apiKeyFile = document.querySelector('input[name="api_key_file"]');
 
     const enabledButton = document.querySelector('#save-connection');
     const disabledButton = document.querySelector('#save-connection-disabled');
     const unsavedChanges = document.getElementById('connection-unsaved-changes');
 
-  if (!vespaTokenID || !vespaTokenValue || !geminiToken) return;
+    if (!geminiToken || !apiKeyFile) return;
 
-    const isValid = vespaTokenID.value.trim() !== '' &&
-                    vespaTokenValue.value.trim() !== '' &&
-                    geminiToken.value.trim() !== '';
+    const isValid = geminiToken.value.trim() !== '' &&
+                    (apiKeyFile.files.length > 0 || apiKeyFile.hasAttribute('data-has-file'));
 
     // Check if any field has changed from its original value
-    const hasChanges = [vespaTokenID, vespaTokenValue, geminiToken].some(input => {
+    const hasChanges = [geminiToken].some(input => {
         const originalValue = input.getAttribute('data-original') || '';
         return input.value.trim() !== originalValue.trim();
-    });
+    }) || apiKeyFile.files.length > 0;
 
     if (isValid) {
         enabledButton.classList.remove('hidden');
