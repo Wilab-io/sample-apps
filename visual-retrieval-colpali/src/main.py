@@ -671,6 +671,7 @@ async def logout(request):
     if "user_id" in request.session:
         del request.session["user_id"]
         del request.session["username"]
+    app.deployed = False
     return Redirect("/login")
 
 @rt("/upload-files", methods=["POST"])
