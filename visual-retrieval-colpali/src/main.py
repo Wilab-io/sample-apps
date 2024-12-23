@@ -98,6 +98,7 @@ image_search_js = Script(src="/static/js/image-search.js")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 # Configure logger
 logger = logging.getLogger("vespa_app")
+logger.handlers.clear()
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(
     logging.Formatter(
