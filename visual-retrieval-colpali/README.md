@@ -22,35 +22,35 @@ Also, 👇
 
 <a href="https://imgflip.com/i/98mhch"><img src="https://i.imgflip.com/98mhch.jpg" title="made at imgflip.com" alt="Funny meme about json output in demo"/></a>
 
-As a prerequisite, you should run [this notebook](https://pyvespa.readthedocs.io/en/latest/examples/visual_pdf_rag_with_vespa_colpali_cloud.html) 
-to prepare the data and deploy the Vespa application. 
+## Running this application
 
-## Setting up your .env variables
-
-The following variables are required in your `.env` file for the application to be able to connect to the Vespa application and the Gemini API:
-
-You can rename the `.env.example` file to `.env` and fill in the required values.
-The other variables are optional, if you want to use mTLS authentication against the Vespa application.
+This application is containerized with Docker Compose. To start it, run:
 
 ```bash
-VESPA_APP_TOKEN_URL=https://abcde.z.vespa-app.cloud
-VESPA_CLOUD_SECRET_TOKEN=vespa_cloud_xxxxxxxx
-GEMINI_API_KEY=asdf
+docker compose up
 ```
 
-If you want to deploy the application to Huggingface, you also need to set a `HF_TOKEN` variable, with write permissions.
-This is personal, and must be created at [huggingface](https://huggingface.co/settings/tokens).
+This will start the application and the Postgres database.
 
-```bash
-HF_TOKEN=hf_xxxxxxxxxx
-```
+You can access the application at `http://localhost:7860`.
+
+If you want to run this application locally, you can follow the instructions below.
 
 ## Setting up python environment
 
 This application should work on Python 3.8 and above.
 
-You can install the dependencies with `pip`, but we recommend using `uv`. 
+You can install the dependencies with `pip`, but we recommend using `uv`.
 Skip to [Installing dependencies using `uv`](#installing-dependencies-using-uv) if you want to use `uv`.
+
+## Document feeding
+
+There's a dependency that is used to feed the documents to Vespa.
+To install it, run:
+
+```bash
+brew install poppler
+```
 
 ### Installing dependencies using `pip`
 
@@ -72,7 +72,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 Then, create a virtual environment:
 
 ```bash
-uv venv 
+uv venv
 ```
 
 Activate the virtual environment:
@@ -87,6 +87,20 @@ Sync your virtual environment with the dependencies:
 uv sync --extra dev
 ```
 
+## Setting up your local database
+
+The application expects a Postgres database to be running locally.
+
+The following configuration is used, you can either set up your database to comply with these settings, or change the settings using the following env variables:
+
+```bash
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=postgres
+```
+
 ## Running the application locally
 
 To run the application locally, you can change into the `src` directory and run:
@@ -95,7 +109,7 @@ To run the application locally, you can change into the `src` directory and run:
 python main.py
 ```
 
-This will start a local server, and you can access the application at `http://localhost:7860`.
+This will start a local server that will connect to the database, and you can access the application at `http://localhost:7860`.
 
 ## Deploy to huggingface 🤗 spaces
 
@@ -209,4 +223,3 @@ Huge thanks to the amazing projects that made it a joy to create this demo 🙏�
 - Allowing us to build **beautiful** full stack web apps in Python [FastHTML](https://fastht.ml/)
 - Introducing the ColPali architecture - [ColPali](https://huggingface.co/vidore/colpali-v1.2)
 - Adding `shadcn` components to FastHTML - [Shad4Fast](https://www.shad4fasthtml.com/)
-  
